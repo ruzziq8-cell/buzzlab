@@ -160,6 +160,13 @@ const checkReminders = async () => {
             const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
 
             try {
+                // Cek apakah nomor valid dan terdaftar di WA
+                const isRegistered = await client.isRegisteredUser(phoneNumber);
+                if (!isRegistered) {
+                    console.log(`⚠️ Number ${phoneNumber} is not registered on WhatsApp.`);
+                    continue;
+                }
+
                 // Kirim pesan
                 await client.sendMessage(phoneNumber, msg);
                 console.log(`✅ Reminder sent to ${phoneNumber}`);

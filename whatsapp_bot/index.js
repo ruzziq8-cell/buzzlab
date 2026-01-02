@@ -59,10 +59,7 @@ const sessions = new Map();
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: puppeteerConfig,
-    webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-    }
+    // HAPUS webVersionCache untuk memaksa versi default yang mungkin lebih kompatibel
 });
 
 // Helper: Get Supabase Client for User

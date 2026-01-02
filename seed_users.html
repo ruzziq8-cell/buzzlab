@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed Users</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: monospace; padding: 2rem; background: #f0f0f0; }
+        #log { background: #fff; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); white-space: pre-wrap; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Seeding Users...</h1>
+    <div id="log">Initializing...</div>
+
+    <script>
+        const logEl = document.getElementById('log');
+        function log(msg, type = 'info') {
+            const line = document.createElement('div');
+            line.className = type;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(line);
+        }
+
+        const USERS_TO_CREATE = [
+            { user: 'ruzziq', pass: 'ruzziq123' },
+            { user: 'alfin', pass: 'alfin123' },
+            { user: 'kevin', pass: 'kevin123' },
+            { user: 'hardian', pass: 'hardian123' }
+        ];
+
+        // Copied from js/supabase.js to ensure immediate execution without waiting for external file loading quirks
+        const SUPABASE_URL = 'https://pyawabcoppwaaaewpkny.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable__MNgyCgZ98xSGsWc4z1lHg_zVKdyZZc';
+
+        async function seed() {
+            if (!window.supabase) {
+                log('Supabase library not loaded!', 'error');
+                return;
+            }
+
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            log('Supabase client initialized.', 'info');
+
+            for (const cred of USERS_TO_CREATE) {
+                const email = `${cred.user}@todolist.app`; // Dummy email
+                const password = cred.pass;
+                const name = cred.user.charAt(0).toUpperCase() + cred.user.slice(1); // Capitalize name
+
+                log(`Attempting to create user: ${cred.user} (${email})...`, 'info');
+
+                try {
+                    const { data, error } = await supabase.auth.signUp({
+                        email: email,
+                        password: password,
+                        options: {
+                            data: {
+                                name: name
+                            }
+                        }
+                    });
+
+                    if (error) {
+                        log(`Failed to create ${cred.user}: ${error.message}`, 'error');
+                    } else {
+                        if (data.user && !data.session) {
+                             log(`Success: ${cred.user} created! (Email confirmation may be required)`, 'success');
+                        } else if (data.user && data.session) {
+                             log(`Success: ${cred.user} created and logged in!`, 'success');
+                        } else {
+                             log(`Unknown status for ${cred.user}`, 'info');
+                        }
+                    }
+
+                } catch (err) {
+                    log(`Exception for ${cred.user}: ${err.message}`, 'error');
+                }
+                
+                // Small delay to be nice to the API
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            log('Seeding completed.', 'info');
+        }
+
+        window.onload = seed;
+    </script>
+</body>
+</html>

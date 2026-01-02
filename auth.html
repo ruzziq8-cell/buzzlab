@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Masuk / Daftar - BuzzLab</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/theme.js"></script>
+    <!-- Supabase JS Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div id="auth-app">
+        <header>
+            <h1>BuzzLab</h1>
+            <button id="theme-toggle" class="btn-icon" aria-label="Toggle Theme">🌙</button>
+        </header>
+        
+        <main class="auth-container">
+            <div class="card auth-card">
+                <div class="auth-tabs">
+                    <button class="tab-btn active" data-tab="login">Masuk</button>
+                    <button class="tab-btn" data-tab="register">Daftar</button>
+                </div>
+
+                <div id="login-form-container" class="auth-form-wrapper">
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label for="login-email">Email / Username</label>
+                            <input type="text" id="login-email" required placeholder="nama@email.com atau username">
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Password</label>
+                            <input type="password" id="login-password" required placeholder="******">
+                        </div>
+                        <div id="login-error" class="error-message"></div>
+                        <button type="submit" id="btn-login" class="btn btn-primary">Masuk</button>
+                    </form>
+                </div>
+
+                <div id="register-form-container" class="auth-form-wrapper" style="display: none;">
+                    <form id="register-form">
+                        <div class="form-group">
+                            <label for="register-name">Nama (Opsional)</label>
+                            <input type="text" id="register-name" placeholder="Nama Anda">
+                        </div>
+                        <div class="form-group">
+                            <label for="register-email">Email / Username</label>
+                            <input type="text" id="register-email" required placeholder="nama@email.com atau username">
+                        </div>
+                        <div class="form-group">
+                            <label for="register-password">Password</label>
+                            <input type="password" id="register-password" required placeholder="Minimal 6 karakter">
+                        </div>
+                        <div id="register-error" class="error-message"></div>
+                        <button type="submit" id="btn-register" class="btn btn-secondary">Daftar</button>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/auth.js"></script>
+</body>
+</html>

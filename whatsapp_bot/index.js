@@ -1,0 +1,225 @@
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+const { createClient } = require('@supabase/supabase-js');
+
+// Config
+const SUPABASE_URL = 'https://pyawabcoppwaaaewpkny.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable__MNgyCgZ98xSGsWc4z1lHg_zVKdyZZc';
+
+// State Management (In-memory for demo)
+// Map<phoneNumber, { access_token, user }>
+const sessions = new Map();
+
+// Initialize WhatsApp Client
+const client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: { 
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        headless: true
+    }
+});
+
+// Helper: Get Supabase Client for User
+const getUserSupabase = (accessToken) => {
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: {
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            }
+        }
+    });
+};
+
+// Main Supabase (for auth only)
+const authSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+client.on('qr', (qr) => {
+    console.log('SCAN QR CODE INI MENGGUNAKAN WHATSAPP ANDA:');
+    qrcode.generate(qr, { small: true });
+});
+
+client.on('ready', () => {
+    console.log('Client is ready!');
+});
+
+// Gunakan message_create agar bisa merespon pesan dari diri sendiri (Note to Self)
+client.on('message_create', async msg => {
+    // Abaikan pesan yang bukan command atau pesan dari status broadcast
+    if (!msg.body.startsWith('!') || msg.from === 'status@broadcast') return;
+
+    // Cegah bot merespon balasannya sendiri (jika balasan mengandung tanda seru di awal - jarang terjadi tapi untuk keamanan)
+    // msg.id.fromMe bernilai true jika pesan dikirim oleh akun host.
+    // Kita izinkan fromMe HANYA jika itu pesan ke diri sendiri (Note to Self) atau test command manual.
+    // Tapi kita harus hati-hati agar tidak loop.
+    // Karena logic kita hanya merespon jika startsWith('!'), dan balasan bot tidak diawali '!', maka aman.
+    
+    const chat = await msg.getChat();
+    // Untuk pesan 'Note to Self', msg.from adalah nomor kita sendiri.
+    // msg.to juga nomor kita sendiri.
+    const sender = msg.from; 
+    const text = msg.body.trim();
+
+    // Command Handling
+    if (text.startsWith('!help')) {
+        msg.reply(
+            `*BuzzLab Bot Help*\n\n` +
+            `Use these commands to manage your tasks:\n` +
+            `1. *!login <username> <password>* - Login to your account\n` +
+            `2. *!list* - List your active tasks\n` +
+            `3. *!add <title> [-- <date>]* - Add task (Date format: YYYY-MM-DD)\n` +
+            `4. *!done <task number>* - Mark task as completed\n` +
+            `5. *!logout* - Logout from bot`
+        );
+    } 
+    
+    else if (text.startsWith('!login')) {
+        const parts = text.split(' ');
+        if (parts.length < 3) {
+            msg.reply('Format salah. Gunakan: !login <username> <password>');
+            return;
+        }
+
+        let email = parts[1];
+        const password = parts[2];
+
+        // Auto-append domain if username provided
+        if (!email.includes('@')) {
+            email += '@todolist.app';
+        }
+
+        try {
+            const { data, error } = await authSupabase.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
+
+            if (error) {
+                msg.reply(`Login gagal: ${error.message}`);
+                return;
+            }
+
+            sessions.set(sender, {
+                access_token: data.session.access_token,
+                user: data.user
+            });
+
+            msg.reply(`Login berhasil! Halo ${data.user.user_metadata?.name || email}. Ketik !list untuk melihat tugas.`);
+        } catch (e) {
+            console.error(e);
+            msg.reply('Terjadi kesalahan saat login.');
+        }
+    }
+
+    else if (text.startsWith('!logout')) {
+        if (sessions.has(sender)) {
+            sessions.delete(sender);
+            msg.reply('Anda telah logout.');
+        } else {
+            msg.reply('Anda belum login.');
+        }
+    }
+
+    // Auth Guard for other commands
+    else if (['!list', '!add', '!done'].some(cmd => text.startsWith(cmd))) {
+        const session = sessions.get(sender);
+        if (!session) {
+            msg.reply('Anda belum login. Silakan login dengan command: !login <username> <password>');
+            return;
+        }
+
+        const supabase = getUserSupabase(session.access_token);
+
+        if (text.startsWith('!list')) {
+            const { data: tasks, error } = await supabase
+                .from('tasks')
+                .select('*')
+                .eq('status', 'active')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                msg.reply('Gagal mengambil data tugas.');
+                return;
+            }
+
+            if (tasks.length === 0) {
+                msg.reply('Tidak ada tugas aktif. Gunakan !add untuk menambah.');
+            } else {
+                let reply = '*Daftar Tugas Anda:*\n\n';
+                tasks.forEach((t, i) => {
+                    const dateStr = t.due_date ? ` [📅 ${t.due_date}]` : '';
+                    reply += `${i + 1}. ${t.title} [${t.priority}]${dateStr}\n`;
+                });
+                // Store mapping for this user to select by index
+                session.lastTasks = tasks; 
+                msg.reply(reply);
+            }
+        }
+
+        else if (text.startsWith('!add')) {
+            let rawInput = text.slice(5).trim();
+            if (!rawInput) {
+                msg.reply('Tulis judul tugas. Contoh: !add Belajar Coding');
+                return;
+            }
+
+            let title = rawInput;
+            let dueDate = null;
+
+            // Check for date separator ' -- '
+            if (rawInput.includes(' -- ')) {
+                const parts = rawInput.split(' -- ');
+                title = parts[0].trim();
+                dueDate = parts[1].trim();
+                
+                // Simple date validation (YYYY-MM-DD)
+                const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                if (!dateRegex.test(dueDate)) {
+                     msg.reply('Format tanggal salah. Gunakan YYYY-MM-DD. Contoh: !add Rapat -- 2023-12-31');
+                     return;
+                }
+            }
+
+            const newTask = {
+                user_id: session.user.id,
+                title: title,
+                priority: 'medium',
+                status: 'active',
+                due_date: dueDate
+            };
+
+            const { error } = await supabase.from('tasks').insert([newTask]);
+
+            if (error) {
+                msg.reply('Gagal menambah tugas.');
+            } else {
+                msg.reply(`Tugas "${title}" berhasil ditambahkan!${dueDate ? ` (Tenggat: ${dueDate})` : ''}`);
+            }
+        }
+
+        else if (text.startsWith('!done')) {
+            const index = parseInt(text.split(' ')[1]) - 1;
+            
+            if (isNaN(index) || !session.lastTasks || !session.lastTasks[index]) {
+                msg.reply('Nomor tugas tidak valid. Gunakan !list dulu untuk melihat nomor.');
+                return;
+            }
+
+            const task = session.lastTasks[index];
+            const { error } = await supabase
+                .from('tasks')
+                .update({ status: 'completed' })
+                .eq('id', task.id);
+
+            if (error) {
+                msg.reply('Gagal update tugas.');
+            } else {
+                msg.reply(`Tugas "${task.title}" ditandai selesai! ✅`);
+                // Remove from local cache
+                session.lastTasks.splice(index, 1);
+            }
+        }
+    }
+});
+
+console.log('Memulai bot...');
+client.initialize();

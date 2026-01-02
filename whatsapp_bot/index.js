@@ -135,49 +135,56 @@ const checkReminders = async () => {
             intervalMs = task.reminder_interval * 60 * 1000;
         }
 
-        let shouldRemind = false;
-        
-        if (!lastReminded) {
+        // LOGIKA WAKTU (DEBUG)
             const created = new Date(task.created_at);
-            if (now - created >= intervalMs) {
-                shouldRemind = true;
-            }
-        } else {
-            if (now - lastReminded >= intervalMs) {
-                shouldRemind = true;
-            }
-        }
+            const timeDiff = lastReminded ? (now - lastReminded) : (now - created);
+            
+            // Debug Log untuk memantau timer
+            console.log(`[DEBUG] Task: "${task.title}" | Diff: ${Math.floor(timeDiff/1000)}s | Interval: ${Math.floor(intervalMs/1000)}s`);
 
-        if (shouldRemind) {
-            let phoneNumber = task.whatsapp_number;
+            let shouldRemind = false;
             
-            // NORMALISASI NOMOR WA
-            // Hapus karakter non-digit
-            phoneNumber = phoneNumber.replace(/\D/g, '');
-            
-            // Pastikan format @c.us
-            if (!phoneNumber.endsWith('@c.us')) {
-                phoneNumber = `${phoneNumber}@c.us`;
+            if (!lastReminded) {
+                if (now - created >= intervalMs) {
+                    shouldRemind = true;
+                }
+            } else {
+                if (now - lastReminded >= intervalMs) {
+                    shouldRemind = true;
+                }
             }
 
-            console.log(`Attempting to send reminder to ${phoneNumber} for task "${task.title}"`);
-            
-            // Format pesan
-            const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
-
-            try {
-                // Cek apakah nomor valid dan terdaftar di WA
-                const isRegistered = await client.isRegisteredUser(phoneNumber);
-                if (!isRegistered) {
-                    console.log(`⚠️ Number ${phoneNumber} is not registered on WhatsApp.`);
-                    continue;
+            if (shouldRemind) {
+                let phoneNumber = task.whatsapp_number;
+                
+                // NORMALISASI NOMOR WA
+                // Hapus karakter non-digit
+                phoneNumber = phoneNumber.replace(/\D/g, '');
+                
+                // Pastikan format @c.us
+                if (!phoneNumber.endsWith('@c.us')) {
+                    phoneNumber = `${phoneNumber}@c.us`;
                 }
 
-                // Kirim pesan
-                await client.sendMessage(phoneNumber, msg);
-                console.log(`✅ Reminder sent to ${phoneNumber}`);
+                console.log(`Attempting to send reminder to ${phoneNumber} for task "${task.title}"`);
+                
+                // Format pesan
+                const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
 
-                // Update last_reminded_at via RPC
+                try {
+                    // Cek apakah nomor valid dan terdaftar di WA
+                    const isRegistered = await client.isRegisteredUser(phoneNumber);
+                    console.log(`[DEBUG] isRegisteredUser(${phoneNumber}): ${isRegistered}`);
+
+                    if (!isRegistered) {
+                        console.log(`⚠️ Number ${phoneNumber} is not registered on WhatsApp. Trying to send anyway...`);
+                    }
+
+                    // Kirim pesan
+                    await client.sendMessage(phoneNumber, msg);
+                    console.log(`✅ Reminder sent to ${phoneNumber}`);
+
+                    // Update last_reminded_at via RPC
                 const { error: updateError } = await authSupabase.rpc('update_last_reminded', {
                     task_id: task.id,
                     new_time: now.toISOString()
@@ -224,6 +231,12 @@ client.on('message_create', async msg => {
     const text = msg.body.trim();
 
     // Command Handling
+    if (text.startsWith('!trigger')) {
+        msg.reply('Memicu pengecekan reminder manual...');
+        await checkReminders();
+        msg.reply('Pengecekan selesai. Cek log terminal.');
+    }
+
     if (text.startsWith('!help')) {
         msg.reply(
             `*BuzzLab Bot Help*\n\n` +

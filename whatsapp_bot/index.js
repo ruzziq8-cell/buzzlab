@@ -13,11 +13,40 @@ let puppeteerConfig = {
 
 if (isTermux) {
     console.log('Detected Termux environment. Using system Chromium...');
-    puppeteerConfig.executablePath = '/data/data/com.termux/files/usr/bin/chromium-browser';
     
-    // Fallback check if path doesn't exist
-    if (!fs.existsSync(puppeteerConfig.executablePath)) {
-        console.warn('WARNING: Chromium not found at default Termux path. Please install it using: pkg install chromium');
+    // List of possible Chromium paths in Termux
+    const possiblePaths = [
+        '/data/data/com.termux/files/usr/bin/chromium',
+        '/data/data/com.termux/files/usr/bin/chromium-browser'
+    ];
+
+    let chromiumPath = null;
+    for (const path of possiblePaths) {
+        if (fs.existsSync(path)) {
+            chromiumPath = path;
+            break;
+        }
+    }
+
+    if (chromiumPath) {
+        console.log(`Chromium found at: ${chromiumPath}`);
+        puppeteerConfig.executablePath = chromiumPath;
+    } else {
+        // Try finding it with 'which' command as last resort
+        try {
+            const { execSync } = require('child_process');
+            chromiumPath = execSync('which chromium').toString().trim();
+            if (chromiumPath && fs.existsSync(chromiumPath)) {
+                 console.log(`Chromium found via 'which': ${chromiumPath}`);
+                 puppeteerConfig.executablePath = chromiumPath;
+            } else {
+                 throw new Error('Not found');
+            }
+        } catch (e) {
+            console.error('ERROR: Chromium not found! Please run: pkg install chromium');
+            console.error('Searched in:', possiblePaths.join(', '));
+            process.exit(1);
+        }
     }
 }
 

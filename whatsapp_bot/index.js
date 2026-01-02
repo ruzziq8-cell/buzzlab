@@ -2,6 +2,24 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
 const http = require('http');
+const fs = require('fs');
+
+// Termux / Android Detection & Configuration
+const isTermux = process.env.TERMUX_VERSION || process.platform === 'android';
+let puppeteerConfig = {
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+    headless: true
+};
+
+if (isTermux) {
+    console.log('Detected Termux environment. Using system Chromium...');
+    puppeteerConfig.executablePath = '/data/data/com.termux/files/usr/bin/chromium-browser';
+    
+    // Fallback check if path doesn't exist
+    if (!fs.existsSync(puppeteerConfig.executablePath)) {
+        console.warn('WARNING: Chromium not found at default Termux path. Please install it using: pkg install chromium');
+    }
+}
 
 // Simple HTTP Server for Health Checks (Required for Cloud Deployments like Render/Koyeb)
 const port = process.env.PORT || 8080;
@@ -24,10 +42,7 @@ const sessions = new Map();
 // Initialize WhatsApp Client
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { 
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        headless: true
-    }
+    puppeteer: puppeteerConfig
 });
 
 // Helper: Get Supabase Client for User

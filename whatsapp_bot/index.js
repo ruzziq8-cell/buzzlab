@@ -56,8 +56,20 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('BuzzLab Bot is Active!');
 });
+
+// Handle Port Collision (Prevent Crash)
+server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+        console.log(`⚠️ Port ${port} is in use. Trying random port...`);
+        server.close();
+        server.listen(0); // 0 lets OS pick random available port
+    } else {
+        console.error('HTTP Server Error:', e);
+    }
+});
+
 server.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
+    console.log(`Server listening on port ${server.address().port}`);
 });
 
 // Config

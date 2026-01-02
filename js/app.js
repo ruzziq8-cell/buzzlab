@@ -115,13 +115,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (waForm) {
         waForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const number = waInput.value.trim();
+            let number = waInput.value.trim();
             if (!number) return;
 
-            // Validate format (simple check)
-            if (!number.startsWith('62')) {
-                alert('Nomor harus diawali dengan kode negara 62 (contoh: 62812...)');
-                return;
+            // Normalisasi nomor WA di sisi client (hapus +, -, spasi)
+            number = number.replace(/\D/g, '');
+            
+            // Auto-replace 0 di depan dengan 62 (asumsi Indonesia)
+            if (number.startsWith('0')) {
+                number = '62' + number.substring(1);
             }
 
             try {

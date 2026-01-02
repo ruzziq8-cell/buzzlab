@@ -93,8 +93,6 @@ const checkReminders = async () => {
     // console.log('Checking for reminders via RPC...'); 
     
     // 1. Panggil RPC get_due_reminders
-    // RPC ini mengembalikan task yang aktif, punya interval reminder > 0, dan user punya wa_number
-    // Bypass RLS via Server-Side Function (Security Definer)
     const { data: reminders, error } = await authSupabase.rpc('get_due_reminders');
 
     if (error) {
@@ -104,13 +102,15 @@ const checkReminders = async () => {
 
     if (!reminders || reminders.length === 0) return;
 
+    console.log(`Found ${reminders.length} tasks to remind.`);
+
     const now = new Date();
 
     for (const task of reminders) {
+        // ... (interval calculation logic) ...
         const lastReminded = task.last_reminded_at ? new Date(task.last_reminded_at) : null;
         let intervalMs;
         
-        // Support interval pendek untuk demo (1 menit di setingan = 5 detik real-time)
         if (task.reminder_interval === 1) {
             intervalMs = 5 * 1000; 
         } else {
@@ -120,20 +120,29 @@ const checkReminders = async () => {
         let shouldRemind = false;
         
         if (!lastReminded) {
-            // Jika belum pernah diingatkan, cek created_at
             const created = new Date(task.created_at);
             if (now - created >= intervalMs) {
                 shouldRemind = true;
             }
         } else {
-            // Jika sudah pernah, cek selisih waktu dari terakhir diingatkan
             if (now - lastReminded >= intervalMs) {
                 shouldRemind = true;
             }
         }
 
         if (shouldRemind) {
-            const phoneNumber = task.whatsapp_number;
+            let phoneNumber = task.whatsapp_number;
+            
+            // NORMALISASI NOMOR WA
+            // Hapus karakter non-digit
+            phoneNumber = phoneNumber.replace(/\D/g, '');
+            
+            // Pastikan format @c.us
+            if (!phoneNumber.endsWith('@c.us')) {
+                phoneNumber = `${phoneNumber}@c.us`;
+            }
+
+            console.log(`Attempting to send reminder to ${phoneNumber} for task "${task.title}"`);
             
             // Format pesan
             const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
@@ -141,7 +150,7 @@ const checkReminders = async () => {
             try {
                 // Kirim pesan
                 await client.sendMessage(phoneNumber, msg);
-                console.log(`Reminder sent to ${phoneNumber} for task "${task.title}"`);
+                console.log(`✅ Reminder sent to ${phoneNumber}`);
 
                 // Update last_reminded_at via RPC
                 const { error: updateError } = await authSupabase.rpc('update_last_reminded', {
@@ -154,7 +163,7 @@ const checkReminders = async () => {
                 }
 
             } catch (e) {
-                console.error(`Failed to send reminder to ${phoneNumber}:`, e);
+                console.error(`❌ Failed to send reminder to ${phoneNumber}:`, e);
             }
         }
     }

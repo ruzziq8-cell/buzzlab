@@ -51,26 +51,29 @@ if (isTermux) {
 }
 
 // Simple HTTP Server for Health Checks (Required for Cloud Deployments like Render/Koyeb)
-const port = process.env.PORT || 8080;
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('BuzzLab Bot is Active!');
-});
+// Also handles port collision recursively
+const startServer = (attemptPort) => {
+    const server = http.createServer((req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('BuzzLab Bot is Active!');
+    });
 
-// Handle Port Collision (Prevent Crash)
-server.on('error', (e) => {
-    if (e.code === 'EADDRINUSE') {
-        console.log(`⚠️ Port ${port} is in use. Trying random port...`);
-        server.close();
-        server.listen(0); // 0 lets OS pick random available port
-    } else {
-        console.error('HTTP Server Error:', e);
-    }
-});
+    server.on('error', (e) => {
+        if (e.code === 'EADDRINUSE') {
+            console.log(`⚠️ Port ${attemptPort} is in use. Trying port ${attemptPort + 1}...`);
+            startServer(attemptPort + 1);
+        } else {
+            console.error('HTTP Server Error:', e);
+        }
+    });
 
-server.listen(port, () => {
-    console.log(`Server listening on port ${server.address().port}`);
-});
+    server.listen(attemptPort, () => {
+        console.log(`Server listening on port ${attemptPort}`);
+    });
+};
+
+const initialPort = process.env.PORT || 8080;
+startServer(initialPort);
 
 // Config
 const SUPABASE_URL = 'https://pyawabcoppwaaaewpkny.supabase.co';
@@ -102,6 +105,9 @@ const authSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Reminder Logic
 const checkReminders = async () => {
+    // Pastikan client sudah siap (sudah scan QR dan login)
+    if (!client.info) return;
+
     // console.log('Checking for reminders via RPC...'); 
     
     // 1. Panggil RPC get_due_reminders

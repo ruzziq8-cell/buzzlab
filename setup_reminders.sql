@@ -13,19 +13,26 @@ ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMP WITH TIME ZONE;
 -- Setup RLS untuk profiles (User hanya bisa update profilenya sendiri)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own profile" 
-ON public.profiles FOR SELECT 
-USING (auth.uid() = id);
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can view own profile') THEN
+    CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+  END IF;
 
-CREATE POLICY "Users can update own profile" 
-ON public.profiles FOR UPDATE 
-USING (auth.uid() = id);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can update own profile') THEN
+    CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+  END IF;
 
-CREATE POLICY "Users can insert own profile" 
-ON public.profiles FOR INSERT 
-WITH CHECK (auth.uid() = id);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can insert own profile') THEN
+    CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+  END IF;
+END $$;
 
 -- Fungsi Helper untuk Bot (Bypass RLS) --
+
+-- Hapus fungsi lama agar bersih
+DROP FUNCTION IF EXISTS get_due_reminders();
+DROP FUNCTION IF EXISTS update_last_reminded(UUID, TIMESTAMP WITH TIME ZONE);
 
 -- 1. Mengambil semua reminder yang aktif beserta nomor WA pemiliknya
 CREATE OR REPLACE FUNCTION get_due_reminders()
@@ -39,7 +46,7 @@ RETURNS TABLE (
   last_reminded_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE
 ) 
-SECURITY DEFINER -- Penting: Bypass RLS agar bot bisa baca semua data
+SECURITY DEFINER
 AS $$
 BEGIN
   RETURN QUERY
@@ -61,7 +68,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 2. Update waktu reminder terakhir (Bypass RLS)
+-- 2. Update waktu reminder terakhir
 CREATE OR REPLACE FUNCTION update_last_reminded(task_id UUID, new_time TIMESTAMP WITH TIME ZONE)
 RETURNS VOID
 SECURITY DEFINER

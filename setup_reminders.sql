@@ -33,6 +33,7 @@ END $$;
 -- Hapus fungsi lama agar bersih
 DROP FUNCTION IF EXISTS get_due_reminders();
 DROP FUNCTION IF EXISTS update_last_reminded(UUID, TIMESTAMP WITH TIME ZONE);
+DROP FUNCTION IF EXISTS create_task_from_bot(TEXT, TEXT, TEXT, INTEGER);
 
 -- 1. Mengambil semua reminder yang aktif beserta nomor WA pemiliknya
 CREATE OR REPLACE FUNCTION get_due_reminders()
@@ -77,5 +78,54 @@ BEGIN
   UPDATE public.tasks
   SET last_reminded_at = new_time
   WHERE id = task_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3. Membuat task baru dari Bot
+CREATE OR REPLACE FUNCTION create_task_from_bot(
+  p_whatsapp_number TEXT,
+  p_title TEXT,
+  p_due_date TEXT DEFAULT NULL,
+  p_interval INTEGER DEFAULT 0
+)
+RETURNS JSON
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_task_id UUID;
+  v_final_due_date TIMESTAMP WITH TIME ZONE;
+BEGIN
+  -- Cari user_id berdasarkan nomor WA
+  SELECT id INTO v_user_id
+  FROM public.profiles
+  WHERE whatsapp_number = p_whatsapp_number
+  LIMIT 1;
+
+  IF v_user_id IS NULL THEN
+    RETURN json_build_object('success', false, 'message', 'User not found');
+  END IF;
+
+  -- Konversi tanggal (jika ada)
+  IF p_due_date IS NOT NULL AND p_due_date <> '' THEN
+     BEGIN
+       v_final_due_date := p_due_date::TIMESTAMP WITH TIME ZONE;
+     EXCEPTION WHEN OTHERS THEN
+       -- Jika format salah, set NULL atau bisa return error
+       v_final_due_date := NULL;
+     END;
+  ELSE
+     v_final_due_date := NULL;
+  END IF;
+
+  -- Insert Task
+  INSERT INTO public.tasks (user_id, title, status, priority, due_date, reminder_interval, created_at)
+  VALUES (v_user_id, p_title, 'active', 'medium', v_final_due_date, p_interval, NOW())
+  RETURNING id INTO v_task_id;
+
+  RETURN json_build_object('success', true, 'task_id', v_task_id, 'title', p_title);
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN json_build_object('success', false, 'message', SQLERRM);
 END;
 $$ LANGUAGE plpgsql;

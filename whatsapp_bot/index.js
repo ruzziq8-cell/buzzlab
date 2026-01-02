@@ -108,13 +108,10 @@ const checkReminders = async () => {
             intervalMs = task.reminder_interval * 60 * 1000;
         }
 
-        // LOGIKA WAKTU (DEBUG)
+        // LOGIKA WAKTU
             const created = new Date(task.created_at);
             const timeDiff = lastReminded ? (now - lastReminded) : (now - created);
             
-            // Debug Log untuk memantau timer
-            console.log(`[DEBUG] Task: "${task.title}" | Diff: ${Math.floor(timeDiff/1000)}s | Interval: ${Math.floor(intervalMs/1000)}s`);
-
             let shouldRemind = false;
             
             if (!lastReminded) {
@@ -139,31 +136,23 @@ const checkReminders = async () => {
                     phoneNumber = `${phoneNumber}@c.us`;
                 }
 
-                console.log(`Attempting to send reminder to ${phoneNumber} for task "${task.title}"`);
+                console.log(`Sending reminder to ${phoneNumber} for "${task.title}"`);
                 
                 // Format pesan
-            const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
+                const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
 
-            try {
-                // LANGSUNG KIRIM TANPA CEK isRegisteredUser
-                // Karena isRegisteredUser sering error "WidFactory not found" di versi WA Web terbaru
-                console.log(`Sending message to ${phoneNumber}...`);
-                
-                await client.sendMessage(phoneNumber, msg);
-                console.log(`✅ Reminder sent to ${phoneNumber}`);
+                try {
+                    await client.sendMessage(phoneNumber, msg);
+                    
+                    // Update last_reminded_at via RPC
+                    await authSupabase.rpc('update_last_reminded', {
+                        task_id: task.id,
+                        new_time: now.toISOString()
+                    });
 
-                // Update last_reminded_at via RPC
-                const { error: updateError } = await authSupabase.rpc('update_last_reminded', {
-                    task_id: task.id,
-                    new_time: now.toISOString()
-                });
-
-                if (updateError) {
-                    console.error(`Failed to update timestamp for task ${task.id}:`, updateError.message);
+                } catch (e) {
+                    console.error(`❌ Failed to send reminder to ${phoneNumber}:`, e);
                 }
-
-            } catch (e) {
-                console.error(`❌ Failed to send reminder to ${phoneNumber}:`, e);
             }
         }
     }
@@ -208,15 +197,92 @@ client.on('message_create', async msg => {
     if (text.startsWith('!help')) {
         msg.reply(
             `*BuzzLab Bot Help*\n\n` +
-            `Use these commands to manage your tasks:\n` +
-            `1. *!login <username> <password>* - Login to your account\n` +
-            `2. *!list* - List your active tasks\n` +
-            `3. *!add <title> [-- <date>]* - Add task (Date format: YYYY-MM-DD)\n` +
-            `4. *!done <task number>* - Mark task as completed\n` +
-            `5. *!logout* - Logout from bot`
+            `Gunakan perintah berikut:\n` +
+            `1. *!add <Judul> [| <Tgl> | <Interval>]*\n   Contoh: !add Rapat | 2024-12-31 | 60\n` +
+            `2. *!list* - Lihat tugas aktif\n` +
+            `3. *!done <Nomor>* - Tandai selesai\n` +
+            `4. *!login <email> <password>* - Login manual (jika nomor belum terdaftar)\n` +
+            `5. *!logout* - Logout sesi manual`
         );
     } 
     
+    else if (text.startsWith('!add')) {
+        let rawInput = text.slice(4).trim(); // !add length is 4
+        if (!rawInput) {
+            msg.reply('⚠️ Format salah.\nContoh: *!add Beli Susu | 2024-12-31 | 60*');
+            return;
+        }
+
+        // Parse Input: Title | DueDate | Interval
+        // Separator bisa " | " atau "|" atau " -- " (legacy support)
+        let parts;
+        if (rawInput.includes('|')) {
+            parts = rawInput.split('|').map(p => p.trim());
+        } else if (rawInput.includes('--')) {
+            parts = rawInput.split('--').map(p => p.trim());
+        } else {
+            parts = [rawInput];
+        }
+
+        const title = parts[0];
+        const dueDate = parts[1] || null;
+        const interval = parts[2] ? parseInt(parts[2]) : 0;
+
+        // Validasi Tanggal Sederhana
+        if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+             msg.reply('⚠️ Format tanggal salah. Gunakan YYYY-MM-DD.');
+             return;
+        }
+
+        // Coba Insert via RPC (Berdasarkan Nomor WA Sender)
+        // Format sender: 628123456789@c.us -> +628123456789
+        const senderNumber = sender.replace('@c.us', '');
+        const formattedNumber = senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`;
+
+        const { data: rpcResult, error: rpcError } = await authSupabase.rpc('create_task_from_bot', {
+            p_whatsapp_number: formattedNumber,
+            p_title: title,
+            p_due_date: dueDate,
+            p_interval: interval
+        });
+
+        if (rpcResult && rpcResult.success) {
+            let reply = `✅ Tugas *"${title}"* berhasil ditambahkan!`;
+            if (dueDate) reply += `\n📅 Tenggat: ${dueDate}`;
+            if (interval > 0) reply += `\n⏰ Reminder: Tiap ${interval} menit`;
+            msg.reply(reply);
+            return;
+        }
+
+        // Jika RPC gagal karena User Not Found, coba fallback ke sesi manual (!login)
+        if (rpcResult && !rpcResult.success && rpcResult.message === 'User not found') {
+            const session = sessions.get(sender);
+            if (session) {
+                // Gunakan sesi login manual
+                const supabase = getUserSupabase(session.access_token);
+                const { error } = await supabase.from('tasks').insert([{
+                    user_id: session.user.id,
+                    title: title,
+                    priority: 'medium',
+                    status: 'active',
+                    due_date: dueDate,
+                    reminder_interval: interval
+                }]);
+
+                if (error) {
+                    msg.reply('❌ Gagal menambah tugas (Login Session): ' + error.message);
+                } else {
+                    msg.reply(`✅ Tugas *"${title}"* ditambahkan (via Login Session)!`);
+                }
+            } else {
+                msg.reply('⚠️ Nomor Anda belum terdaftar di profil BuzzLab.\nSilakan update nomor WhatsApp di menu settings website, atau gunakan !login <email> <password>.');
+            }
+        } else {
+            console.error('RPC Error (!add):', rpcError || rpcResult);
+            msg.reply('❌ Terjadi kesalahan sistem saat menambah tugas.');
+        }
+    }
+
     else if (text.startsWith('!login')) {
         const parts = text.split(' ');
         if (parts.length < 3) {
@@ -265,7 +331,7 @@ client.on('message_create', async msg => {
     }
 
     // Auth Guard for other commands
-    else if (['!list', '!add', '!done'].some(cmd => text.startsWith(cmd))) {
+    else if (['!list', '!done'].some(cmd => text.startsWith(cmd))) {
         const session = sessions.get(sender);
         if (!session) {
             msg.reply('Anda belum login. Silakan login dengan command: !login <username> <password>');
@@ -297,47 +363,6 @@ client.on('message_create', async msg => {
                 // Store mapping for this user to select by index
                 session.lastTasks = tasks; 
                 msg.reply(reply);
-            }
-        }
-
-        else if (text.startsWith('!add')) {
-            let rawInput = text.slice(5).trim();
-            if (!rawInput) {
-                msg.reply('Tulis judul tugas. Contoh: !add Belajar Coding');
-                return;
-            }
-
-            let title = rawInput;
-            let dueDate = null;
-
-            // Check for date separator ' -- '
-            if (rawInput.includes(' -- ')) {
-                const parts = rawInput.split(' -- ');
-                title = parts[0].trim();
-                dueDate = parts[1].trim();
-                
-                // Simple date validation (YYYY-MM-DD)
-                const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-                if (!dateRegex.test(dueDate)) {
-                     msg.reply('Format tanggal salah. Gunakan YYYY-MM-DD. Contoh: !add Rapat -- 2023-12-31');
-                     return;
-                }
-            }
-
-            const newTask = {
-                user_id: session.user.id,
-                title: title,
-                priority: 'medium',
-                status: 'active',
-                due_date: dueDate
-            };
-
-            const { error } = await supabase.from('tasks').insert([newTask]);
-
-            if (error) {
-                msg.reply('Gagal menambah tugas.');
-            } else {
-                msg.reply(`Tugas "${title}" berhasil ditambahkan!${dueDate ? ` (Tenggat: ${dueDate})` : ''}`);
             }
         }
 

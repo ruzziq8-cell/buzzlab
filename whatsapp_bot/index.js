@@ -145,22 +145,17 @@ const checkReminders = async () => {
                 console.log(`Attempting to send reminder to ${phoneNumber} for task "${task.title}"`);
                 
                 // Format pesan
-                const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
+            const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
 
-                try {
-                    // Cek apakah nomor valid dan terdaftar di WA
-                    const isRegistered = await client.isRegisteredUser(phoneNumber);
-                    console.log(`[DEBUG] isRegisteredUser(${phoneNumber}): ${isRegistered}`);
+            try {
+                // LANGSUNG KIRIM TANPA CEK isRegisteredUser
+                // Karena isRegisteredUser sering error "WidFactory not found" di versi WA Web terbaru
+                console.log(`Sending message to ${phoneNumber}...`);
+                
+                await client.sendMessage(phoneNumber, msg);
+                console.log(`✅ Reminder sent to ${phoneNumber}`);
 
-                    if (!isRegistered) {
-                        console.log(`⚠️ Number ${phoneNumber} is not registered on WhatsApp. Trying to send anyway...`);
-                    }
-
-                    // Kirim pesan
-                    await client.sendMessage(phoneNumber, msg);
-                    console.log(`✅ Reminder sent to ${phoneNumber}`);
-
-                    // Update last_reminded_at via RPC
+                // Update last_reminded_at via RPC
                 const { error: updateError } = await authSupabase.rpc('update_last_reminded', {
                     task_id: task.id,
                     new_time: now.toISOString()

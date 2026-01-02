@@ -79,6 +79,71 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // --- WhatsApp Settings Logic ---
+    const waModal = document.getElementById('wa-modal');
+    const btnWaSettings = document.getElementById('btn-wa-settings');
+    const closeWaModal = document.getElementById('close-wa-modal');
+    const waForm = document.getElementById('wa-form');
+    const waInput = document.getElementById('wa-number');
+
+    if (btnWaSettings) {
+        btnWaSettings.addEventListener('click', async () => {
+            waModal.style.display = 'block';
+            // Fetch current number
+            try {
+                const { data, error } = await window.supabaseClient
+                    .from('profiles')
+                    .select('whatsapp_number')
+                    .eq('id', currentUser.id)
+                    .single();
+                
+                if (data && data.whatsapp_number) {
+                    waInput.value = data.whatsapp_number;
+                }
+            } catch (err) {
+                console.error('Error fetching WA number:', err);
+            }
+        });
+    }
+
+    if (closeWaModal) {
+        closeWaModal.addEventListener('click', () => {
+            waModal.style.display = 'none';
+        });
+    }
+
+    if (waForm) {
+        waForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const number = waInput.value.trim();
+            if (!number) return;
+
+            // Validate format (simple check)
+            if (!number.startsWith('62')) {
+                alert('Nomor harus diawali dengan kode negara 62 (contoh: 62812...)');
+                return;
+            }
+
+            try {
+                const { error } = await window.supabaseClient
+                    .from('profiles')
+                    .upsert({ 
+                        id: currentUser.id, 
+                        whatsapp_number: number,
+                        updated_at: new Date()
+                    });
+
+                if (error) throw error;
+
+                alert('Nomor WhatsApp berhasil disimpan!');
+                waModal.style.display = 'none';
+            } catch (err) {
+                console.error('Error saving WA number:', err);
+                alert('Gagal menyimpan nomor: ' + err.message);
+            }
+        });
+    }
+
     // --- Auth Check ---
     const initApp = async () => {
         if (!window.supabaseClient) {
@@ -349,6 +414,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tagsStr = document.getElementById('task-tags').value.trim();
         const priority = document.getElementById('task-priority').value;
         const date = document.getElementById('task-date').value;
+        const reminder = document.getElementById('task-reminder').value;
         const btnSubmit = addTaskForm.querySelector('button[type="submit"]');
 
         if (!title) return;
@@ -366,7 +432,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             priority: priority,
             due_date: date || null,
             tags: tags,
-            status: 'active'
+            status: 'active',
+            reminder_interval: parseInt(reminder) || 0
         };
 
         const { data, error } = await window.supabaseClient
@@ -398,6 +465,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tagsStr = document.getElementById('edit-task-tags').value.trim();
         const priority = document.getElementById('edit-task-priority').value;
         const date = document.getElementById('edit-task-date').value;
+        const reminder = document.getElementById('edit-task-reminder').value;
         const btnSubmit = editTaskForm.querySelector('button[type="submit"]');
 
         if (!title) return;
@@ -413,6 +481,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             priority: priority,
             due_date: date || null,
             tags: tags,
+            reminder_interval: parseInt(reminder) || 0,
             updated_at: new Date().toISOString()
         };
 
@@ -491,6 +560,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('edit-task-priority').value = task.priority;
         document.getElementById('edit-task-date').value = task.due_date || '';
         
+        const reminderSelect = document.getElementById('edit-task-reminder');
+        if (reminderSelect) {
+            reminderSelect.value = task.reminder_interval || 0;
+        }
+
         editModal.classList.add('show');
     };
 

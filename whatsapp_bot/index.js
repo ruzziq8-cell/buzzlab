@@ -88,6 +88,88 @@ const getUserSupabase = (accessToken) => {
 // Main Supabase (for auth only)
 const authSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Reminder Logic
+const checkReminders = async () => {
+    console.log('Checking for reminders...');
+    
+    // 1. Get all active tasks with reminders
+    // We use authSupabase but without user context (public query).
+    // Note: RLS must allow reading tasks if they have reminders, or we need Service Role Key.
+    // Assuming we don't have Service Key, this query might fail if RLS is strict.
+    // BUT, for this demo, let's try. If it fails, we need the Service Key.
+    
+    // WORKAROUND: Since we don't have Service Role Key, we can only remind users who are "logged in" via the bot session.
+    // We will iterate over active bot sessions.
+    
+    for (const [phoneNumber, session] of sessions.entries()) {
+        if (!session.user) continue;
+        
+        const userClient = getUserSupabase(session.access_token);
+        
+        const { data: tasks, error } = await userClient
+            .from('tasks')
+            .select('*')
+            .eq('status', 'active')
+            .gt('reminder_interval', 0);
+
+        if (error || !tasks) continue;
+
+        const now = new Date();
+        
+        for (const task of tasks) {
+            const lastReminded = task.last_reminded_at ? new Date(task.last_reminded_at) : null;
+            const intervalMs = task.reminder_interval * 60 * 1000;
+            
+            let shouldRemind = false;
+            
+            if (!lastReminded) {
+                // Never reminded. Check if created_at + interval passed? 
+                // Or just remind immediately if it's new?
+                // Let's remind if created_at was > interval ago.
+                const created = new Date(task.created_at);
+                if (now - created >= intervalMs) {
+                    shouldRemind = true;
+                }
+            } else {
+                if (now - lastReminded >= intervalMs) {
+                    shouldRemind = true;
+                }
+            }
+
+            if (shouldRemind) {
+                // Send WhatsApp Message
+                // phoneNumber is like '62812...@c.us'
+                const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
+                
+                try {
+                    await client.sendMessage(phoneNumber, msg);
+                    console.log(`Reminder sent to ${phoneNumber} for task ${task.title}`);
+                    
+                    // Update last_reminded_at
+                    await userClient
+                        .from('tasks')
+                        .update({ last_reminded_at: now.toISOString() })
+                        .eq('id', task.id);
+                        
+                } catch (e) {
+                    console.error('Failed to send reminder:', e);
+                }
+            }
+        }
+    }
+    
+    // NEW: Also check 'profiles' table for users who might not be logged in via !login command
+    // This requires the tasks to be accessible. Since we don't have Service Key, 
+    // we can only support this if RLS allows public read (bad practice) OR if we use the session map.
+    // For now, sticking to session map is safer.
+    // BUT, the user asked to "link user ruzziq@gmail.com".
+    // If ruzziq is NOT logged in via !login, the bot won't know his token.
+    // LIMITATION: Bot can only remind users who have performed !login.
+};
+
+// Run checkReminders every 1 minute
+setInterval(checkReminders, 60 * 1000);
+
 client.on('qr', (qr) => {
     console.log('SCAN QR CODE INI MENGGUNAKAN WHATSAPP ANDA:');
     qrcode.generate(qr, { small: true });

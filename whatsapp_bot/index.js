@@ -1,6 +1,17 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
+const http = require('http');
+
+// Simple HTTP Server for Health Checks (Required for Cloud Deployments like Render/Koyeb)
+const port = process.env.PORT || 8080;
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('BuzzLab Bot is Active!');
+});
+server.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+});
 
 // Config
 const SUPABASE_URL = 'https://pyawabcoppwaaaewpkny.supabase.co';

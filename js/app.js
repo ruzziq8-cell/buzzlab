@@ -170,6 +170,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         const userName = session.user.user_metadata?.name || session.user.email;
         userGreeting.textContent = `Halo, ${userName}!`;
         
+        // Check Admin Role
+        try {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', currentUser.id)
+                .single();
+            
+            if (profile && profile.role === 'admin') {
+                const btnAdmin = document.getElementById('btn-admin');
+                if (btnAdmin) btnAdmin.style.display = 'inline-block';
+            }
+        } catch (e) {
+            console.error('Error checking admin role:', e);
+        }
+
         // Setup Logout
         btnLogout.addEventListener('click', async () => {
             const { error } = await supabase.auth.signOut();

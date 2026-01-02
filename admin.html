@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzLab Admin Panel</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/theme.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .admin-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .user-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .user-table th, .user-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .user-table th {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--success-color);
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .role-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .role-admin { background-color: #e74c3c; color: white; }
+        .role-user { background-color: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>🛡️ Admin Panel</h1>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <a href="index.html" class="btn-small btn-secondary">← Back to App</a>
+                <button id="theme-toggle" class="btn-icon">🌙</button>
+            </div>
+        </header>
+
+        <main class="admin-container">
+            <div id="loading" style="text-align: center;">Memuat data user...</div>
+            
+            <div id="admin-content" style="display: none;">
+                <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                    <h2>Daftar Pengguna</h2>
+                    <button id="btn-refresh" class="btn-small">🔄 Refresh</button>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>WhatsApp</th>
+                                <th>Role</th>
+                                <th>Tugas (Aktif/Total)</th>
+                                <th>Reminder</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-table-body">
+                            <!-- Rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="access-denied" style="display: none; text-align: center; color: red; margin-top: 50px;">
+                <h2>⛔ Akses Ditolak</h2>
+                <p>Anda bukan admin.</p>
+                <a href="index.html" class="btn btn-primary">Kembali</a>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>

@@ -2,8 +2,27 @@
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   whatsapp_number TEXT,
+  role TEXT DEFAULT 'user',
+  is_reminder_enabled BOOLEAN DEFAULT true,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
+
+-- Tambahkan kolom jika tabel sudah ada (idempotency)
+DO $$ 
+BEGIN
+    BEGIN
+        ALTER TABLE public.profiles ADD COLUMN role TEXT DEFAULT 'user';
+    EXCEPTION
+        WHEN duplicate_column THEN NULL;
+    END;
+    
+    BEGIN
+        ALTER TABLE public.profiles ADD COLUMN is_reminder_enabled BOOLEAN DEFAULT true;
+    EXCEPTION
+        WHEN duplicate_column THEN NULL;
+    END;
+END $$;
+
 
 -- Tambahkan kolom reminder ke tabel tasks jika belum ada
 ALTER TABLE public.tasks 
@@ -65,7 +84,8 @@ BEGIN
   WHERE 
     t.status = 'active' 
     AND t.reminder_interval > 0
-    AND p.whatsapp_number IS NOT NULL;
+    AND p.whatsapp_number IS NOT NULL
+    AND p.is_reminder_enabled = true;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -129,3 +149,46 @@ EXCEPTION WHEN OTHERS THEN
   RETURN json_build_object('success', false, 'message', SQLERRM);
 END;
 $$ LANGUAGE plpgsql;
+
+-- 4. Admin RPC: Get All Users Stats
+CREATE OR REPLACE FUNCTION get_admin_users_stats()
+RETURNS TABLE (
+  user_id UUID,
+  email TEXT,
+  whatsapp_number TEXT,
+  role TEXT,
+  is_reminder_enabled BOOLEAN,
+  total_tasks BIGINT,
+  active_tasks BIGINT
+)
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    p.id as user_id,
+    u.email::TEXT,
+    p.whatsapp_number::TEXT,
+    p.role::TEXT,
+    p.is_reminder_enabled,
+    COUNT(t.id) as total_tasks,
+    COUNT(CASE WHEN t.status = 'active' THEN 1 END) as active_tasks
+  FROM public.profiles p
+  JOIN auth.users u ON p.id = u.id
+  LEFT JOIN public.tasks t ON p.id = t.user_id
+  GROUP BY p.id, u.email, p.whatsapp_number, p.role, p.is_reminder_enabled;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 5. Admin RPC: Toggle Reminder Status
+CREATE OR REPLACE FUNCTION toggle_user_reminder_status(target_user_id UUID, new_status BOOLEAN)
+RETURNS VOID
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.profiles
+  SET is_reminder_enabled = new_status
+  WHERE id = target_user_id;
+END;
+$$ LANGUAGE plpgsql;
+

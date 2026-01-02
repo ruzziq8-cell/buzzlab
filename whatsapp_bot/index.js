@@ -101,9 +101,30 @@ const checkReminders = async () => {
     // WORKAROUND: Since we don't have Service Role Key, we can only remind users who are "logged in" via the bot session.
     // We will iterate over active bot sessions.
     
-    for (const [phoneNumber, session] of sessions.entries()) {
-        if (!session.user) continue;
+    // Also include "self" (host user) if not explicitly logged in but matches the number
+    const hostNumber = client.info ? client.info.wid.user : null;
+    
+    const usersToCheck = new Map(sessions);
+    
+    // If host number is not in sessions (didn't do !login), we might want to check for them too if we had a way to get their tasks.
+    // But we need an access token to read their tasks.
+    // Unless we assume the host is "ruzziq@gmail.com" and we hardcode/store that token?
+    // Or we rely on the fact that if you use your own number, you should have done !login.
+    
+    // However, the user said "saya memakai nomer saya sendiri... tapi bot tidak mengirim reminder".
+    // Issue: Maybe the phone number format in DB (62812...) doesn't match the session key (62812...@c.us)?
+    // Or maybe the loop is skipping because of some mismatch.
+    
+    console.log(`Active sessions: ${usersToCheck.size}`);
+
+    for (const [phoneNumber, session] of usersToCheck.entries()) {
+        if (!session.user) {
+            console.log(`Skipping ${phoneNumber}: No user session`);
+            continue;
+        }
         
+        console.log(`Checking tasks for ${phoneNumber} (User: ${session.user.email})...`);
+
         const userClient = getUserSupabase(session.access_token);
         
         const { data: tasks, error } = await userClient
@@ -112,7 +133,15 @@ const checkReminders = async () => {
             .eq('status', 'active')
             .gt('reminder_interval', 0);
 
-        if (error || !tasks) continue;
+        if (error) {
+            console.error(`Error fetching tasks for ${phoneNumber}:`, error.message);
+            continue;
+        }
+
+        if (!tasks || tasks.length === 0) {
+             // console.log(`No active reminders for ${phoneNumber}`);
+             continue;
+        }
 
         const now = new Date();
         

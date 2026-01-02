@@ -45,10 +45,10 @@ BEGIN
   RETURN QUERY
   SELECT 
     t.id,
-    t.title,
-    t.priority,
-    t.due_date,
-    p.whatsapp_number,
+    t.title::TEXT,
+    t.priority::TEXT,
+    t.due_date::TEXT,
+    p.whatsapp_number::TEXT,
     t.reminder_interval,
     t.last_reminded_at,
     t.created_at

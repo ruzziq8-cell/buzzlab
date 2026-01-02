@@ -1,52 +1,24 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
-const http = require('http');
 const fs = require('fs');
+const http = require('http');
 
-// Termux / Android Detection & Configuration
-const isTermux = process.env.TERMUX_VERSION || process.platform === 'android';
+// Setup Puppeteer for Termux/Linux vs Windows
 let puppeteerConfig = {
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
-    headless: true
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions']
 };
 
-if (isTermux) {
+if (process.env.PREFIX === '/data/data/com.termux/files/usr') {
     console.log('Detected Termux environment. Using system Chromium...');
+    const chromiumPath = '/data/data/com.termux/files/usr/bin/chromium-browser';
     
-    // List of possible Chromium paths in Termux
-    const possiblePaths = [
-        '/data/data/com.termux/files/usr/bin/chromium',
-        '/data/data/com.termux/files/usr/bin/chromium-browser'
-    ];
-
-    let chromiumPath = null;
-    for (const path of possiblePaths) {
-        if (fs.existsSync(path)) {
-            chromiumPath = path;
-            break;
-        }
-    }
-
-    if (chromiumPath) {
+    if (fs.existsSync(chromiumPath)) {
         console.log(`Chromium found at: ${chromiumPath}`);
         puppeteerConfig.executablePath = chromiumPath;
     } else {
-        // Try finding it with 'which' command as last resort
-        try {
-            const { execSync } = require('child_process');
-            chromiumPath = execSync('which chromium').toString().trim();
-            if (chromiumPath && fs.existsSync(chromiumPath)) {
-                 console.log(`Chromium found via 'which': ${chromiumPath}`);
-                 puppeteerConfig.executablePath = chromiumPath;
-            } else {
-                 throw new Error('Not found');
-            }
-        } catch (e) {
-            console.error('ERROR: Chromium not found! Please run: pkg install chromium');
-            console.error('Searched in:', possiblePaths.join(', '));
-            process.exit(1);
-        }
+        console.error('❌ Chromium NOT found! Please run: pkg install chromium');
     }
 }
 
@@ -83,10 +55,14 @@ const SUPABASE_ANON_KEY = 'sb_publishable__MNgyCgZ98xSGsWc4z1lHg_zVKdyZZc';
 // Map<phoneNumber, { access_token, user }>
 const sessions = new Map();
 
-// Initialize WhatsApp Client
+// Client Initialization
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: puppeteerConfig
+    puppeteer: puppeteerConfig,
+    webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+    }
 });
 
 // Helper: Get Supabase Client for User

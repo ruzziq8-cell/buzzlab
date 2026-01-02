@@ -90,120 +90,74 @@ const authSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Reminder Logic
 const checkReminders = async () => {
-    console.log('Checking for reminders...');
+    // console.log('Checking for reminders via RPC...'); 
     
-    // 1. Get all active tasks with reminders
-    // We use authSupabase but without user context (public query).
-    // Note: RLS must allow reading tasks if they have reminders, or we need Service Role Key.
-    // Assuming we don't have Service Key, this query might fail if RLS is strict.
-    // BUT, for this demo, let's try. If it fails, we need the Service Key.
-    
-    // WORKAROUND: Since we don't have Service Role Key, we can only remind users who are "logged in" via the bot session.
-    // We will iterate over active bot sessions.
-    
-    // Also include "self" (host user) if not explicitly logged in but matches the number
-    const hostNumber = client.info ? client.info.wid.user : null;
-    
-    const usersToCheck = new Map(sessions);
-    
-    // If host number is not in sessions (didn't do !login), we might want to check for them too if we had a way to get their tasks.
-    // But we need an access token to read their tasks.
-    // Unless we assume the host is "ruzziq@gmail.com" and we hardcode/store that token?
-    // Or we rely on the fact that if you use your own number, you should have done !login.
-    
-    // However, the user said "saya memakai nomer saya sendiri... tapi bot tidak mengirim reminder".
-    // Issue: Maybe the phone number format in DB (62812...) doesn't match the session key (62812...@c.us)?
-    // Or maybe the loop is skipping because of some mismatch.
-    
-    console.log(`Active sessions: ${usersToCheck.size}`);
+    // 1. Panggil RPC get_due_reminders
+    // RPC ini mengembalikan task yang aktif, punya interval reminder > 0, dan user punya wa_number
+    // Bypass RLS via Server-Side Function (Security Definer)
+    const { data: reminders, error } = await authSupabase.rpc('get_due_reminders');
 
-    for (const [phoneNumber, session] of usersToCheck.entries()) {
-        if (!session.user) {
-            console.log(`Skipping ${phoneNumber}: No user session`);
-            continue;
-        }
+    if (error) {
+        console.error('RPC Error (checkReminders):', error.message);
+        return;
+    }
+
+    if (!reminders || reminders.length === 0) return;
+
+    const now = new Date();
+
+    for (const task of reminders) {
+        const lastReminded = task.last_reminded_at ? new Date(task.last_reminded_at) : null;
+        let intervalMs;
         
-        console.log(`Checking tasks for ${phoneNumber} (User: ${session.user.email})...`);
-
-        const userClient = getUserSupabase(session.access_token);
-        
-        const { data: tasks, error } = await userClient
-            .from('tasks')
-            .select('*')
-            .eq('status', 'active')
-            .gt('reminder_interval', 0);
-
-        if (error) {
-            console.error(`Error fetching tasks for ${phoneNumber}:`, error.message);
-            continue;
+        // Support interval pendek untuk demo (1 menit di setingan = 5 detik real-time)
+        if (task.reminder_interval === 1) {
+            intervalMs = 5 * 1000; 
+        } else {
+            intervalMs = task.reminder_interval * 60 * 1000;
         }
 
-        if (!tasks || tasks.length === 0) {
-             // console.log(`No active reminders for ${phoneNumber}`);
-             continue;
-        }
-
-        const now = new Date();
+        let shouldRemind = false;
         
-        for (const task of tasks) {
-            const lastReminded = task.last_reminded_at ? new Date(task.last_reminded_at) : null;
-            
-            // Handle special 5-second interval (represented as 1 minute in DB for simplicity, or we check specifically)
-            // Let's assume value '1' means 5 seconds for this demo request.
-            // Normal logic: intervalMs = task.reminder_interval * 60 * 1000;
-            
-            let intervalMs;
-            if (task.reminder_interval === 1) {
-                intervalMs = 5 * 1000; // 5 seconds
-            } else {
-                intervalMs = task.reminder_interval * 60 * 1000; // minutes to ms
+        if (!lastReminded) {
+            // Jika belum pernah diingatkan, cek created_at
+            const created = new Date(task.created_at);
+            if (now - created >= intervalMs) {
+                shouldRemind = true;
             }
-            
-            let shouldRemind = false;
-            
-            if (!lastReminded) {
-                // Never reminded. Check if created_at + interval passed? 
-                // Or just remind immediately if it's new?
-                // Let's remind if created_at was > interval ago.
-                const created = new Date(task.created_at);
-                if (now - created >= intervalMs) {
-                    shouldRemind = true;
-                }
-            } else {
-                if (now - lastReminded >= intervalMs) {
-                    shouldRemind = true;
-                }
+        } else {
+            // Jika sudah pernah, cek selisih waktu dari terakhir diingatkan
+            if (now - lastReminded >= intervalMs) {
+                shouldRemind = true;
             }
+        }
 
-            if (shouldRemind) {
-                // Send WhatsApp Message
-                // phoneNumber is like '62812...@c.us'
-                const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
-                
-                try {
-                    await client.sendMessage(phoneNumber, msg);
-                    console.log(`Reminder sent to ${phoneNumber} for task ${task.title}`);
-                    
-                    // Update last_reminded_at
-                    await userClient
-                        .from('tasks')
-                        .update({ last_reminded_at: now.toISOString() })
-                        .eq('id', task.id);
-                        
-                } catch (e) {
-                    console.error('Failed to send reminder:', e);
+        if (shouldRemind) {
+            const phoneNumber = task.whatsapp_number;
+            
+            // Format pesan
+            const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
+
+            try {
+                // Kirim pesan
+                await client.sendMessage(phoneNumber, msg);
+                console.log(`Reminder sent to ${phoneNumber} for task "${task.title}"`);
+
+                // Update last_reminded_at via RPC
+                const { error: updateError } = await authSupabase.rpc('update_last_reminded', {
+                    task_id: task.id,
+                    new_time: now.toISOString()
+                });
+
+                if (updateError) {
+                    console.error(`Failed to update timestamp for task ${task.id}:`, updateError.message);
                 }
+
+            } catch (e) {
+                console.error(`Failed to send reminder to ${phoneNumber}:`, e);
             }
         }
     }
-    
-    // NEW: Also check 'profiles' table for users who might not be logged in via !login command
-    // This requires the tasks to be accessible. Since we don't have Service Key, 
-    // we can only support this if RLS allows public read (bad practice) OR if we use the session map.
-    // For now, sticking to session map is safer.
-    // BUT, the user asked to "link user ruzziq@gmail.com".
-    // If ruzziq is NOT logged in via !login, the bot won't know his token.
-    // LIMITATION: Bot can only remind users who have performed !login.
 };
 
 // Run checkReminders every 5 seconds (to support the 5-sec interval)

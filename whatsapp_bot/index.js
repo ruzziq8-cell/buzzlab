@@ -118,7 +118,17 @@ const checkReminders = async () => {
         
         for (const task of tasks) {
             const lastReminded = task.last_reminded_at ? new Date(task.last_reminded_at) : null;
-            const intervalMs = task.reminder_interval * 60 * 1000;
+            
+            // Handle special 5-second interval (represented as 1 minute in DB for simplicity, or we check specifically)
+            // Let's assume value '1' means 5 seconds for this demo request.
+            // Normal logic: intervalMs = task.reminder_interval * 60 * 1000;
+            
+            let intervalMs;
+            if (task.reminder_interval === 1) {
+                intervalMs = 5 * 1000; // 5 seconds
+            } else {
+                intervalMs = task.reminder_interval * 60 * 1000; // minutes to ms
+            }
             
             let shouldRemind = false;
             
@@ -167,8 +177,8 @@ const checkReminders = async () => {
     // LIMITATION: Bot can only remind users who have performed !login.
 };
 
-// Run checkReminders every 1 minute
-setInterval(checkReminders, 60 * 1000);
+// Run checkReminders every 5 seconds (to support the 5-sec interval)
+setInterval(checkReminders, 5 * 1000);
 
 client.on('qr', (qr) => {
     console.log('SCAN QR CODE INI MENGGUNAKAN WHATSAPP ANDA:');

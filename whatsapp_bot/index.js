@@ -57,7 +57,7 @@ const sessions = new Map();
 
 // Client Initialization
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({ clientId: 'buzzlab_bot_v2' }),
     puppeteer: puppeteerConfig,
     // HAPUS webVersionCache untuk memaksa versi default yang mungkin lebih kompatibel
 });

@@ -154,7 +154,6 @@ const checkReminders = async () => {
                     console.error(`❌ Failed to send reminder to ${phoneNumber}:`, e);
                 }
             }
-        }
     }
 };
 

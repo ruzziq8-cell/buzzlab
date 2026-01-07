@@ -674,7 +674,24 @@ client.on('message_create', async msg => {
         const aiResponse = await processWithAI(text, taskContext);
         
         // Cek apakah ada JSON Action di dalam respon AI
-        const jsonMatch = aiResponse.text.match(/```json\s*([\s\S]*?)\s*```/);
+        let jsonMatch = aiResponse.text.match(/```json\s*([\s\S]*?)\s*```/);
+        let jsonString = null;
+
+        if (jsonMatch) {
+            jsonString = jsonMatch[1];
+        } else {
+            // Fallback: Manual Extraction untuk JSON tanpa code block
+            // Cari posisi dimulainya {"action"
+            const actionIndex = aiResponse.text.indexOf('{"action"');
+            if (actionIndex !== -1) {
+                // Cari tutup kurawal terakhir di pesan
+                const lastBraceIndex = aiResponse.text.lastIndexOf('}');
+                if (lastBraceIndex > actionIndex) {
+                    jsonString = aiResponse.text.substring(actionIndex, lastBraceIndex + 1);
+                    jsonMatch = [jsonString]; // Mock match agar bisa di-replace
+                }
+            }
+        }
         
         // Default reply adalah teks dari AI (bersihkan JSON jika ada)
         let finalReply = aiResponse.text;
@@ -682,9 +699,9 @@ client.on('message_create', async msg => {
             finalReply = aiResponse.text.replace(jsonMatch[0], '').trim(); // Selalu hapus JSON dari chat
         }
 
-        if (jsonMatch) {
+        if (jsonString) {
             try {
-                const actionData = JSON.parse(jsonMatch[1]);
+                const actionData = JSON.parse(jsonString);
                 
                 if (actionData.action === 'create_task' && userProfile) {
                     const { title, priority, due_date, reminder_interval } = actionData.data;

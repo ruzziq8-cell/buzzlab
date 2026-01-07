@@ -11,7 +11,9 @@ async function processWithAI(userMessage, context = "") {
             };
         }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+        // Gunakan model 'gemini-1.5-flash' yang lebih stabil dan memiliki kuota gratis lebih besar
+        // Hindari 'gemini-flash-latest' karena kadang mengarah ke versi experimental dengan kuota sangat kecil
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         const systemPrompt = `
 Kamu adalah asisten AI untuk "BuzzLab", sebuah aplikasi To-Do List.
@@ -67,6 +69,12 @@ ${userMessage}
 
     } catch (error) {
         console.error("AI Error:", error);
+        
+        // Handle Rate Limit / Quota Exceeded (Error 429)
+        if (error.message && error.message.includes("429")) {
+             return { text: "⏳ Waduh, saya terlalu banyak mikir barusan. Kuota AI sedang penuh. Coba tanya lagi dalam 1 menit ya!" };
+        }
+
         return { text: "Maaf, otak AI saya sedang error sebentar. 🤯" };
     }
 }

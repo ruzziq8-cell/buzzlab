@@ -1,8 +1,13 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+// HARDCODED API KEY (Sementara, untuk fix masalah environment variable di Termux)
+// Key Baru: AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8
+const FORCE_API_KEY = "AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8";
+
 // Inisialisasi Gemini
-// DEBUG: Cek apakah API Key terbaca
-const apiKey = process.env.GEMINI_API_KEY;
+// Prioritaskan Hardcoded Key jika ada
+const apiKey = FORCE_API_KEY || process.env.GEMINI_API_KEY;
+
 if (apiKey) {
     console.log(`[AI SERVICE] API Key loaded: ${apiKey.substring(0, 5)}...${apiKey.substring(apiKey.length - 4)}`);
 } else {

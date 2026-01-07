@@ -194,6 +194,7 @@ const checkReminders = async () => {
                 if (task.due_date) {
                     try {
                         dateStr = new Date(task.due_date).toLocaleString('id-ID', { 
+                            timeZone: 'Asia/Jakarta',
                             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', 
                             hour: '2-digit', minute: '2-digit' 
                         }).replace('.', ':'); // Fix separator jam di beberapa locale

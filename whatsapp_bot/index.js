@@ -74,6 +74,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable__MNgyCgZ98xSGsWc4z1lHg_zVKdyZZc';
 const sessions = new Map();
 // Anti-Spam / Anti-Loop Guard: Map<senderId, lastTimestamp>
 const lastRequestTime = new Map();
+// Chat History Context: Map<senderId, Array<{role, content}>>
+const chatHistory = new Map();
 
 // Client Initialization
 const client = new Client({
@@ -668,9 +670,19 @@ client.on('message_create', async msg => {
             taskContext = `USER_NOT_LOGGED_IN. SARANKAN: !login <email> <pass>`;
         }
 
+        // Ambil History Chat
+        let history = chatHistory.get(sender) || [];
+        // Limit history to last 6 messages (3 turns) to save tokens/memory
+        if (history.length > 6) history = history.slice(history.length - 6);
+
         // Proses dengan AI
         // await client.sendMessage(sender, "⏳"); // Hapus indikator loading yang mengganggu
-        const aiResponse = await processWithAI(text, taskContext);
+        const aiResponse = await processWithAI(text, taskContext, history);
+        
+        // Simpan ke History (User & AI)
+        history.push({ role: 'user', content: text });
+        history.push({ role: 'assistant', content: aiResponse.text });
+        chatHistory.set(sender, history);
         
         // Cek apakah ada JSON Action di dalam respon AI
         let jsonMatch = aiResponse.text.match(/```json\s*([\s\S]*?)\s*```/);

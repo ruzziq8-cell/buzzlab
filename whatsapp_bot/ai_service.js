@@ -26,7 +26,7 @@ function getGeminiKey() {
     return process.env.MY_API_KEY || (GEMINI_KEY_PARTS[0] + GEMINI_KEY_PARTS[1]);
 }
 
-async function processWithAI(userMessage, context = "") {
+async function processWithAI(userMessage, context = "", history = []) {
     // Prompt SUPER RINGKAS (Hemat Token Groq Limit 6000 TPM)
     const baseSystemPrompt = `Lo adalah 'BuzzLab Bestie', asisten pribadi yang FRONTAL, CEPLAS-CEPLOS, dan SUPER GAUL.
 Gaya bicara: Pake 'Lo/Gue', panggil user 'Bos', 'Coy', atau 'Gan'. WAJIB SLENGEAN dan KOCAK.
@@ -80,6 +80,14 @@ ATURAN UTAMA:
     // Masukkan Context ke System Prompt agar lebih kuat
     const systemPrompt = `${baseSystemPrompt}\n\nDATA TUGAS USER SAAT INI:\n${context}`;
 
+    // Format History untuk Pesan (jika ada)
+    // History berupa array [{ role: 'user'|'assistant', content: '...' }]
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history,
+        { role: 'user', content: userMessage }
+    ];
+
     // --- STRATEGI 1: GROQ (Tercepat - LPU) ---
     try {
         const currentKey = getGroqKey();
@@ -92,10 +100,7 @@ ATURAN UTAMA:
                 'Authorization': `Bearer ${currentKey}`
             },
             body: JSON.stringify({
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userMessage }
-                ],
+                messages: messages,
                 model: "llama-3.1-8b-instant"
             }),
             signal: AbortSignal.timeout(5000) // 5 Detik Timeout
@@ -113,12 +118,19 @@ ATURAN UTAMA:
     try {
         const geminiKey = getGeminiKey();
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+        
+        // Gemini pakai format parts, kita gabung history manual
+        let geminiHistory = "";
+        if (history.length > 0) {
+            geminiHistory = "\nRIWAYAT CHAT SEBELUMNYA:\n" + history.map(h => `${h.role === 'user' ? 'User' : 'AI'}: ${h.content}`).join('\n') + "\n";
+        }
+
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{
-                    parts: [{ text: `${systemPrompt}\n\nUser: ${userMessage}` }]
+                    parts: [{ text: `${systemPrompt}\n${geminiHistory}\nUser: ${userMessage}` }]
                 }]
             }),
             signal: AbortSignal.timeout(8000) // 8 Detik Timeout
@@ -142,10 +154,7 @@ ATURAN UTAMA:
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userMessage }
-                ],
+                messages: messages,
                 model: 'openai', 
                 seed: 42,
                 jsonMode: false

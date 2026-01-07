@@ -2,32 +2,29 @@
 // const fetch = require('node-fetch'); // HAPUS INI karena menyebabkan error MODULE_NOT_FOUND jika tidak diinstall
 
 async function processWithAI(userMessage, context = "") {
-    // KITA AKAN GUNAKAN KEY BARU ANDA YANG TADI: AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8
-    const apiKey = "AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8";
+    // === GANTI KE GROQ (LEBIH STABIL & GRATIS) ===
+    // Masukkan API Key Groq Anda di sini nanti
+    // Contoh: "gsk_8g..."
+    const apiKey = process.env.GROQ_API_KEY || "MASUKKAN_KEY_GROQ_DISINI"; 
     
-    // DAFTAR MODEL YANG AKAN DICOBA SATU PER SATU
-    const modelsToTry = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-pro",
-        "gemini-1.0-pro"
-    ];
+    // Kita gunakan model Llama 3 (Cerdas & Cepat)
+    const url = "https://api.groq.com/openai/v1/chat/completions";
 
     const payload = {
-        contents: [{
-            parts: [{
-                text: `
-Kamu adalah asisten AI untuk "BuzzLab", aplikasi To-Do List.
-Jawablah dengan santai dan sopan dalam Bahasa Indonesia.
-
-CONTEXT:
-${context}
-
-USER:
-${userMessage}
-`
-            }]
-        }]
+        model: "llama3-8b-8192", // Model yang sangat cepat dan gratis
+        messages: [
+            {
+                role: "system",
+                content: `Kamu adalah asisten AI untuk "BuzzLab", aplikasi To-Do List.
+Jawablah dengan santai, sopan, dan singkat dalam Bahasa Indonesia.
+Jangan terlalu formal. Gunakan emoji sesekali.`
+            },
+            {
+                role: "user",
+                content: `CONTEXT: ${context}\n\nUSER: ${userMessage}`
+            }
+        ],
+        temperature: 0.7
     };
 
     // Cek apakah fetch tersedia (Node 18+)
@@ -36,65 +33,50 @@ ${userMessage}
         return "Maaf, sistem AI sedang error (Node.js version issue).";
     }
 
-    // LOOPING COBA MODEL SATU PER SATU
-    for (const model of modelsToTry) {
-        console.log(`[AI SERVICE] Mencoba model: ${model}...`);
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    try {
+        console.log(`[AI SERVICE] Mengirim request ke Groq...`);
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify(payload)
+        });
 
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`[AI SERVICE] Gagal pakai ${model}:`, response.status);
-                
-                // Jika error 404 (Model Not Found) atau 503 (Overloaded), lanjut ke model berikutnya
-                if (response.status === 404 || response.status === 503) {
-                    continue; // Coba model berikutnya
-                }
-                
-                // Jika error Auth (400), langsung berhenti
-                if (response.status === 400 && errorText.includes("API_KEY_INVALID")) {
-                    return { text: "⚠️ API Key salah atau belum aktif." };
-                }
-                
-                // Error lain, lanjut coba model lain siapa tahu bisa
-                continue;
-            }
-
-            const data = await response.json();
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[AI SERVICE] Error Groq: ${response.status} - ${errorText}`);
             
-            // Cek apakah ada candidates
-            if (!data.candidates || data.candidates.length === 0) {
-                 console.error(`[AI SERVICE] ${model} merespon tapi tanpa jawaban.`);
-                 continue;
+            if (response.status === 401) {
+                return { text: "⚠️ API Key Groq belum disetting atau salah." };
             }
-
-            const text = data.candidates[0].content.parts[0].text;
-            console.log(`[AI SERVICE] Sukses dengan model: ${model}`);
-            
-            // Cek JSON Action
-            try {
-                const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
-                    return JSON.parse(cleanText);
-                }
-            } catch (e) {}
-
-            return { text: text };
-
-        } catch (error) {
-            console.error(`[AI SERVICE] Error koneksi ke ${model}:`, error.message);
-            // Lanjut ke model berikutnya jika koneksi gagal
+            return { text: `⚠️ Error AI: ${response.status}` };
         }
-    }
 
-    // Jika semua model gagal
-    return { text: "Maaf, semua model AI sedang sibuk atau tidak tersedia saat ini. Coba lagi nanti ya! 🤯" };
+        const data = await response.json();
+        
+        if (!data.choices || data.choices.length === 0) {
+             return { text: "Maaf, AI sedang melamun (no response)." };
+        }
+
+        const text = data.choices[0].message.content;
+        console.log(`[AI SERVICE] Sukses!`);
+        
+        // Cek JSON Action (jika AI membalas dengan format JSON untuk aksi)
+        try {
+            const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
+                return JSON.parse(cleanText);
+            }
+        } catch (e) {}
+
+        return { text: text };
+
+    } catch (error) {
+        console.error(`[AI SERVICE] Network Error:`, error.message);
+        return { text: "Maaf, koneksi internet bot sedang bermasalah." };
+    }
 }
 
 module.exports = { processWithAI };

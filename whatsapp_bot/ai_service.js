@@ -30,9 +30,9 @@ async function processWithAI(userMessage, context = "") {
     // Prompt SUPER RINGKAS (Hemat Token Groq Limit 6000 TPM)
     const systemPrompt = `BuzzLab Bot. Jawab santai.
 CRUD TUGAS => WAJIB JSON di akhir:
-\`\`\`json
-{"action":"create_task"|"update_task"|"delete_task","data":{"title":"...","priority":"medium","due_date":"YYYY-MM-DD"}}
-\`\`\`
+```json
+{"action":"create_task"|"update_task"|"delete_task","data":{"title":"...","priority":"medium","due_date":"YYYY-MM-DD","reminder_interval":60}}
+```
 TANYA/LIHAT => NO JSON!`;
 
     // Gabungkan pesan user dengan context

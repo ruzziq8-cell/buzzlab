@@ -687,7 +687,7 @@ client.on('message_create', async msg => {
                 const actionData = JSON.parse(jsonMatch[1]);
                 
                 if (actionData.action === 'create_task' && userProfile) {
-                    const { title, priority, due_date } = actionData.data;
+                    const { title, priority, due_date, reminder_interval } = actionData.data;
                     
                     // Eksekusi ke Database Supabase
                     const { error } = await authSupabase.from('tasks').insert([{
@@ -695,11 +695,14 @@ client.on('message_create', async msg => {
                         title: title || 'Tugas Baru',
                         priority: priority || 'medium',
                         due_date: due_date || null,
+                        reminder_interval: reminder_interval || null,
                         status: 'active'
                     }]);
 
                     if (!error) {
-                        finalReply += `\n\n✅ *Sukses!* Tugas "${title}" berhasil disimpan.`;
+                        finalReply += `\n\n✅ *Sukses!* Tugas "${title}" berhasil disimpan`;
+                        if (reminder_interval) finalReply += ` dengan reminder tiap ${reminder_interval} menit.`;
+                        else finalReply += `.`;
                     } else {
                         finalReply += `\n\n❌ *Gagal menyimpan:* ${error.message}`;
                     }

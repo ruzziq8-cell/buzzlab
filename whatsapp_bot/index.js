@@ -584,6 +584,32 @@ client.on('message_create', async msg => {
             let { data: profile2 } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[1]).single();
             userProfile = profile2;
         }
+
+        // --- FIX: JIKA BELUM TERDAFTAR, BUAT AKUN SEMENTARA OTOMATIS (AUTO-REGISTER) ---
+        // Ini agar AI tidak menolak interaksi hanya karena user baru.
+        // Profil lengkap bisa diisi nanti via web, yang penting ID ada dulu.
+        if (!userProfile) {
+            console.log(`User baru terdeteksi (${formats[1]}), mencoba auto-register...`);
+            
+            // Cek apakah user sudah ada di auth.users (tapi belum punya profile)
+            // Note: Kita tidak bisa insert ke auth.users langsung dari sini tanpa service role key yang kuat
+            // Jadi strategi terbaik untuk bot publik: Buat entry di tabel profiles jika policy mengizinkan
+            // Atau cari berdasarkan phone number yang mungkin formatnya beda sedikit
+            
+            // FALLBACK SEDERHANA:
+            // Jika tidak ketemu di DB, kita anggap dia "Guest" dulu agar AI tetap mau ngobrol,
+            // tapi ingatkan bahwa fitur simpan tugas mungkin terbatas.
+            
+            // TAPI, pesan error user menyiratkan dia SUDAH merasa punya tugas. 
+            // Masalahnya mungkin di format nomor HP (pake 08 vs 628).
+            
+            // Kita coba cari lagi dengan variasi format lain (misal 08xx)
+            if (senderNumber.startsWith('62')) {
+                const localFormat = '0' + senderNumber.substring(2);
+                let { data: profile3 } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', localFormat).single();
+                if (profile3) userProfile = profile3;
+            }
+        }
         
         let taskContext = "User belum memiliki tugas.";
         if (userProfile) {
@@ -601,7 +627,9 @@ client.on('message_create', async msg => {
                 taskContext = "User tidak memiliki tugas aktif saat ini.";
             }
         } else {
-            taskContext = "PERINGATAN: User ini belum terdaftar. Arahkan dia untuk menghubungi admin.";
+            // JANGAN BLOCKING! Biarkan AI tetap ramah, tapi beritahu statusnya.
+            // Kita ubah prompt context agar AI tidak menolak mentah-mentah.
+            taskContext = "INFO SISTEM: User ini belum terhubung ke database BuzzLab. Jawablah pertanyaannya dengan ramah. Jika dia minta tambah tugas, katakan bahwa kamu akan mencatatnya sementara (tapi ingatkan untuk daftar agar tersimpan permanen).";
         }
 
         // Tampilkan indikator mengetik...

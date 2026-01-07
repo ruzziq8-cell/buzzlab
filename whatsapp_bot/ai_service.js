@@ -11,11 +11,26 @@ async function processWithAI(userMessage, context = "") {
             };
         }
 
-        // Gunakan model 'gemini-1.5-flash' yang lebih stabil dan memiliki kuota gratis lebih besar
-        // Hindari 'gemini-flash-latest' karena kadang mengarah ke versi experimental dengan kuota sangat kecil
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // DAFTAR MODEL YANG AKAN DICOBA (Fallback Mechanism)
+        // Jika model pertama gagal (404/429), akan mencoba model berikutnya
+        const modelsToTry = [
+            "gemini-1.5-flash-latest", // Prioritas 1: Flash terbaru
+            "gemini-1.5-flash-001",    // Prioritas 2: Flash versi stabil 001
+            "gemini-1.5-flash",        // Prioritas 3: Flash alias standar
+            "gemini-pro"               // Prioritas 4: Fallback ke 1.0 Pro (pasti ada)
+        ];
 
-        const systemPrompt = `
+        let lastError = null;
+        let result = null;
+        let usedModel = "";
+
+        // Loop untuk mencoba model satu per satu
+        for (const modelName of modelsToTry) {
+            try {
+                // console.log(`Mencoba model AI: ${modelName}...`); // Debugging (optional)
+                const model = genAI.getGenerativeModel({ model: modelName });
+                
+                const systemPrompt = `
 Kamu adalah asisten AI untuk "BuzzLab", sebuah aplikasi To-Do List.
 Tugasmu adalah membantu user mengelola tugas atau sekadar mengobrol santai.
 Gunakan Bahasa Indonesia yang santai tapi sopan.
@@ -48,7 +63,28 @@ ${context}
 ${userMessage}
 `;
 
-        const result = await model.generateContent(systemPrompt);
+                result = await model.generateContent(systemPrompt);
+                usedModel = modelName;
+                break; // Jika berhasil, keluar dari loop
+
+            } catch (e) {
+                console.error(`Gagal dengan model ${modelName}:`, e.message);
+                lastError = e;
+                
+                // Jika errornya 429 (Quota), jangan lanjut coba-coba, langsung stop biar gak kena ban
+                if (e.message && e.message.includes("429")) {
+                    throw e; 
+                }
+                // Jika error lain (misal 404), lanjut ke model berikutnya
+                continue;
+            }
+        }
+
+        // Jika semua model gagal
+        if (!result) {
+            throw lastError || new Error("Semua model AI gagal merespons.");
+        }
+
         const response = await result.response;
         const text = response.text();
 

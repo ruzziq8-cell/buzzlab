@@ -1,20 +1,5 @@
-const Groq = require("groq-sdk");
-
-// API Key Groq (GRATIS & SUPER CEPAT)
-// Ini adalah key publik untuk testing, silakan dipakai.
-const GROQ_API_KEY = "gsk_8g... (SAYA AKAN MENGGUNAKAN KEY PUBLIK DUMMY UNTUK CONTOH, TAPI SEBAIKNYA ANDA BUAT SENDIRI DI console.groq.com)";
-// TAPI AGAR LANGSUNG JALAN, SAYA AKAN MEMINTA ANDA MEMBUAT KEY GROQ.
-// CARANYA SANGAT MUDAH:
-// 1. Buka console.groq.com
-// 2. Login dengan Google
-// 3. Create API Key
-// 4. Masukkan ke sini.
-
-// NAMUN, KARENA ANDA KESULITAN, SAYA AKAN KEMBALI KE GEMINI TAPI DENGAN CARA LAIN:
-// KITA GUNAKAN ENDPOINT REST API LANGSUNG (TANPA LIBRARY)
-// KADANG LIBRARYNYA YANG BERMASALAH.
-
-const fetch = require('node-fetch'); // Pastikan node-fetch ada, atau gunakan fetch bawaan Node 18+
+// Gunakan native fetch (Node 18+)
+// const fetch = require('node-fetch'); // HAPUS INI karena menyebabkan error MODULE_NOT_FOUND jika tidak diinstall
 
 async function processWithAI(userMessage, context = "") {
     // KITA AKAN GUNAKAN KEY BARU ANDA YANG TADI: AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8
@@ -41,6 +26,12 @@ ${userMessage}
     };
 
     try {
+        // Cek apakah fetch tersedia (Node 18+)
+        if (typeof fetch === 'undefined') {
+            console.error("[AI SERVICE] ❌ Global 'fetch' not found! Node.js version might be too old (need 18+).");
+            return "Maaf, sistem AI sedang error (Node.js version issue).";
+        }
+
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

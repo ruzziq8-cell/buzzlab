@@ -150,7 +150,18 @@ const checkReminders = async () => {
                     phoneNumber = `${phoneNumber}@c.us`;
                 }
 
-                console.log(`Sending reminder to ${phoneNumber} for "${task.title}"`);
+                // Hitung nomor urut tugas untuk user ini
+                const { data: userTasks } = await authSupabase
+                    .from('tasks')
+                    .select('id')
+                    .eq('whatsapp_number', task.whatsapp_number)
+                    .eq('status', 'active')
+                    .order('created_at', { ascending: false });
+
+                const taskIndex = userTasks ? userTasks.findIndex(t => t.id === task.id) : -1;
+                const taskNumber = taskIndex !== -1 ? taskIndex + 1 : '?';
+
+                console.log(`Sending reminder to ${phoneNumber} for "${task.title}" (Task #${taskNumber})`);
                 
                 // Siapkan Pesan Teks (Tanpa Tombol karena Deprecated)
                 const msgText = `🔔 *REMINDER TUGAS* 🔔\n\n` +
@@ -158,8 +169,8 @@ const checkReminders = async () => {
                                 `Prioritas: ${task.priority}\n` +
                                 `Tenggat: ${task.due_date || '-'}\n\n` +
                                 `Ketik perintah di bawah untuk merespon:\n` +
-                                `✅ Selesai: *!done ${task.title}*\n` +
-                                `⏰ Tunda: *!snooze ${task.title}*`;
+                                `✅ Selesai: *!done ${taskNumber}*\n` +
+                                `⏰ Tunda: *!snooze ${taskNumber}*`;
 
                 try {
                     await client.sendMessage(phoneNumber, msgText);
@@ -207,38 +218,44 @@ client.on('message_create', async msg => {
 
     // Command Handling
 
-    // HANDLER !done <Judul> dan !snooze <Judul>
+    // HANDLER !done <Nomor> dan !snooze <Nomor>
     if (text.startsWith('!done ') || text.startsWith('!snooze ')) {
         const isDone = text.startsWith('!done ');
-        const titleFragment = text.split(' ').slice(1).join(' ').trim(); // Ambil sisa teks setelah command
+        const args = text.split(' ');
+        const taskNumber = parseInt(args[1]);
         
-        if (!titleFragment) {
-             msg.reply('⚠️ Harap sertakan judul tugas. Contoh: !done Rapat');
+        if (isNaN(taskNumber)) {
+             msg.reply('⚠️ Harap sertakan nomor tugas yang valid. Contoh: !done 1');
              return;
         }
 
-        // Cari session login untuk user ini
+        // Cari session login untuk user ini (opsional)
         let session = sessions.get(sender);
         
-        // Cari task berdasarkan judul (partial match) dan nomor WA
+        // Cari task berdasarkan nomor urut (tanpa perlu session login bot)
         const senderNumber = sender.replace('@c.us', '');
         const formattedNumber = senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`;
 
-        // Kita cari task yang aktif milik user ini dengan judul mirip
+        // Ambil semua tugas aktif user ini, urutkan berdasarkan waktu buat (konsisten dengan !list dan reminder)
         const { data: tasks, error } = await authSupabase
             .from('tasks')
             .select('*')
             .eq('whatsapp_number', formattedNumber)
             .eq('status', 'active')
-            .ilike('title', `%${titleFragment}%`) // Cari yang mengandung kata tersebut
-            .limit(1);
+            .order('created_at', { ascending: false }); // Urutan harus sama dengan saat reminder dibuat
 
         if (error || !tasks || tasks.length === 0) {
-            msg.reply(`⚠️ Maaf, tidak dapat menemukan tugas aktif dengan judul yang mengandung "${titleFragment}".`);
+            msg.reply('⚠️ Tidak ada tugas aktif yang ditemukan.');
             return;
         }
 
-        const task = tasks[0];
+        const taskIndex = taskNumber - 1;
+        if (taskIndex < 0 || taskIndex >= tasks.length) {
+            msg.reply(`⚠️ Nomor tugas tidak valid. Masukkan nomor antara 1 - ${tasks.length}.`);
+            return;
+        }
+
+        const task = tasks[taskIndex];
 
         if (isDone) {
             // Update status selesai
@@ -251,7 +268,7 @@ client.on('message_create', async msg => {
             if (updateError) {
                 msg.reply('❌ Gagal update status tugas.');
             } else {
-                msg.reply(`✅ Mantap! Tugas *"${task.title}"* telah ditandai selesai.`);
+                msg.reply(`✅ Mantap! Tugas *"${task.title}"* (No. ${taskNumber}) telah ditandai selesai.`);
             }
         } else {
             // Logic Tunda 15 Menit (!snooze)

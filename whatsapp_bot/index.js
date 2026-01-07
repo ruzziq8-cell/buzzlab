@@ -567,6 +567,9 @@ client.on('message_create', async msg => {
     // AI HANDLER (Untuk chat & perintah natural language)
     // ---------------------------------------------------------
     else {
+        // PENTING: Jangan biarkan AI merespon pesan Command (!)
+        if (text.startsWith('!')) return;
+
         // Hanya respon jika pesan cukup panjang (hindari "ok", "y")
         if (text.length < 2) return;
 

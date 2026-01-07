@@ -552,6 +552,9 @@ client.on('message_create', async msg => {
                 let reply = '*Daftar Tugas Anda:*\n\n';
                 tasks.forEach((t, i) => {
                     let dStr = '';
+                    // DEBUG: Cek raw date dari database
+                    console.log(`[DEBUG LIST] Task ${i+1} Raw DueDate:`, t.due_date);
+                    
                     if (t.due_date) {
                         try {
                             dStr = ' [📅 ' + new Date(t.due_date).toLocaleString('id-ID', { 
@@ -779,20 +782,27 @@ client.on('message_create', async msg => {
                         console.log('[DEBUG AI] Fixed DueDate (WIB):', fixedDueDate);
                     }
 
-                    const { error } = await authSupabase.from('tasks').insert([{
+                    const { data: insertedData, error } = await authSupabase.from('tasks').insert([{
                         user_id: userProfile.id,
                         title: title || 'Tugas Baru',
                         priority: priority || 'medium',
                         due_date: fixedDueDate || null,
                         reminder_interval: reminder_interval || null,
                         status: 'active'
-                    }]);
+                    }]).select(); // Tambahkan .select() untuk melihat hasil simpan
 
                     if (!error) {
+                        // Cek apa yang sebenarnya tersimpan di DB
+                        const savedTask = insertedData && insertedData[0];
+                        console.log('[DEBUG SAVE] Saved Task DueDate:', savedTask ? savedTask.due_date : 'No Data');
+
                         let dateInfo = '';
-                        if (fixedDueDate) {
+                        // Gunakan data dari DB jika ada, untuk konfirmasi akurat
+                        const finalDate = savedTask ? savedTask.due_date : fixedDueDate;
+                        
+                        if (finalDate) {
                             try {
-                                dateInfo = ' 📅 ' + new Date(fixedDueDate).toLocaleString('id-ID', { 
+                                dateInfo = ' 📅 ' + new Date(finalDate).toLocaleString('id-ID', { 
                                     timeZone: 'Asia/Jakarta',
                                     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
                                 }).replace('.', ':');
@@ -862,8 +872,15 @@ client.on('message_create', async msg => {
                         }
                         if (reminder_interval) updates.reminder_interval = reminder_interval;
 
-                        const { error } = await authSupabase.from('tasks').update(updates).eq('id', realTask.id);
-                        if (!error) successCount++;
+                        const { data: updatedData, error } = await authSupabase.from('tasks').update(updates).eq('id', realTask.id).select();
+                        if (!error) {
+                            successCount++;
+                            // Gunakan data aktual dari DB untuk feedback
+                            if (updatedData && updatedData[0]) {
+                                actionData.data.due_date = updatedData[0].due_date;
+                                console.log('[DEBUG UPDATE] Saved Task DueDate:', updatedData[0].due_date);
+                            }
+                        }
                     }
                     console.log(`[DEBUG AI ACTION] Update Task: TargetIds=${JSON.stringify(targetIds)}, Success=${successCount}`);
                     if (successCount === 0) console.log("Available Tasks Context:", tasks.map((t,i) => `${i+1}:${t.title}`).join(', '));

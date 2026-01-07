@@ -28,17 +28,30 @@ function getGeminiKey() {
 
 async function processWithAI(userMessage, context = "") {
     // Prompt SUPER RINGKAS (Hemat Token Groq Limit 6000 TPM)
-    const systemPrompt = `BuzzLab Bot. Jawab santai.
-DATA TUGAS ADA DI "CTX". JANGAN MENGARANG DATA SENDIRI!
-JIKA User minta buat/ubah/hapus tugas:
-OUTPUT HANYA JSON (Tanpa teks lain/penjelasan):
-\`\`\`json
-{"action":"create_task"|"update_task"|"delete_task","data":{"id": 1 (nomor urut), "title":"...","priority":"medium","due_date":"YYYY-MM-DD","reminder_interval":60, "status": "completed"}}
-\`\`\`
-JIKA Tanya/Lihat: Jawab biasa (NO JSON).`;
+    const baseSystemPrompt = `BuzzLab Bot. Jawab santai.
+JANGAN PERNAH MENULIS ULANG DATA TUGAS DI CHAT.
+JANGAN GUNAKAN FORMAT "CTX:" DI BALASAN.
 
-    // Gabungkan pesan user dengan context
-    const fullMessage = `CTX:${context}\nUSR:${userMessage}`;
+CONTOH REQUEST & RESPONSE (WAJIB IKUTI):
+User: "Tugas 1 selesai"
+AI: \`\`\`json
+{"action":"update_task","data":{"id":[1],"status":"completed"}}
+\`\`\`
+
+User: "Hapus tugas 2"
+AI: \`\`\`json
+{"action":"delete_task","data":{"id":[2]}}
+\`\`\`
+
+User: "Buat tugas beli susu besok"
+AI: \`\`\`json
+{"action":"create_task","data":{"title":"Beli susu","due_date":"2026-01-09","priority":"medium"}}
+\`\`\`
+
+JIKA TANYA/LIHAT: Jawab biasa tanpa JSON.`;
+
+    // Masukkan Context ke System Prompt agar lebih kuat
+    const systemPrompt = `${baseSystemPrompt}\n\nDATA TUGAS USER SAAT INI:\n${context}`;
 
     // --- STRATEGI 1: GROQ (Tercepat - LPU) ---
     try {
@@ -54,7 +67,7 @@ JIKA Tanya/Lihat: Jawab biasa (NO JSON).`;
             body: JSON.stringify({
                 messages: [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: fullMessage }
+                    { role: 'user', content: userMessage }
                 ],
                 model: "llama-3.1-8b-instant"
             }),
@@ -78,7 +91,7 @@ JIKA Tanya/Lihat: Jawab biasa (NO JSON).`;
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{
-                    parts: [{ text: `${systemPrompt}\n\n${fullMessage}` }]
+                    parts: [{ text: `${systemPrompt}\n\nUser: ${userMessage}` }]
                 }]
             }),
             signal: AbortSignal.timeout(8000) // 8 Detik Timeout
@@ -104,7 +117,7 @@ JIKA Tanya/Lihat: Jawab biasa (NO JSON).`;
             body: JSON.stringify({
                 messages: [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: fullMessage }
+                    { role: 'user', content: userMessage }
                 ],
                 model: 'openai', 
                 seed: 42,

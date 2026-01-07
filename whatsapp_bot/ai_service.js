@@ -48,6 +48,11 @@ AI: \`\`\`json
 {"action":"create_task","data":{"title":"Beli susu","due_date":"2026-01-09","priority":"medium"}}
 \`\`\`
 
+User: "Ingatkan saya rapat nanti sore setiap 30 menit"
+AI: \`\`\`json
+{"action":"create_task","data":{"title":"Rapat","priority":"high","reminder_interval":30}}
+\`\`\`
+
 JIKA TANYA/LIHAT: Jawab biasa tanpa JSON.`;
 
     // Masukkan Context ke System Prompt agar lebih kuat

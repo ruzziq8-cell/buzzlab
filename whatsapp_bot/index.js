@@ -571,65 +571,81 @@ client.on('message_create', async msg => {
         if (text.length < 2) return;
 
         // Fetch User Profile & Tasks for Context
-        const senderNumber = sender.replace('@c.us', '');
-        const formats = [
-            senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`, 
-            senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber
-        ];
-
         let userProfile = null;
-        let { data: profile } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[0]).single();
-        if (profile) userProfile = profile;
-        else {
-            let { data: profile2 } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[1]).single();
-            userProfile = profile2;
+        let tasks = [];
+        let isManualLogin = false;
+
+        // PRIORITAS 1: Cek apakah user sudah login manual via !login
+        const session = sessions.get(sender);
+        if (session && session.user) {
+            userProfile = session.user; // Pakai data user dari sesi login
+            isManualLogin = true;
+            
+            // Ambil tugas menggunakan token user (Pasti berhasil, bypass RLS)
+            try {
+                const userClient = getUserSupabase(session.access_token);
+                const { data: t, error } = await userClient
+                    .from('tasks')
+                    .select('*')
+                    .eq('status', 'active')
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                
+                if (!error && t) tasks = t;
+            } catch (err) {
+                console.error('Error fetching tasks via session:', err.message);
+            }
         }
 
-        // --- FIX: JIKA BELUM TERDAFTAR, BUAT AKUN SEMENTARA OTOMATIS (AUTO-REGISTER) ---
-        // Ini agar AI tidak menolak interaksi hanya karena user baru.
-        // Profil lengkap bisa diisi nanti via web, yang penting ID ada dulu.
+        // PRIORITAS 2: Jika belum login, coba cari manual by Phone Number (Public Lookup)
         if (!userProfile) {
-            console.log(`User baru terdeteksi (${formats[1]}), mencoba auto-register...`);
-            
-            // Cek apakah user sudah ada di auth.users (tapi belum punya profile)
-            // Note: Kita tidak bisa insert ke auth.users langsung dari sini tanpa service role key yang kuat
-            // Jadi strategi terbaik untuk bot publik: Buat entry di tabel profiles jika policy mengizinkan
-            // Atau cari berdasarkan phone number yang mungkin formatnya beda sedikit
-            
-            // FALLBACK SEDERHANA:
-            // Jika tidak ketemu di DB, kita anggap dia "Guest" dulu agar AI tetap mau ngobrol,
-            // tapi ingatkan bahwa fitur simpan tugas mungkin terbatas.
-            
-            // TAPI, pesan error user menyiratkan dia SUDAH merasa punya tugas. 
-            // Masalahnya mungkin di format nomor HP (pake 08 vs 628).
-            
-            // Kita coba cari lagi dengan variasi format lain (misal 08xx)
-            if (senderNumber.startsWith('62')) {
+            const senderNumber = sender.replace('@c.us', '');
+            const formats = [
+                senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`, 
+                senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber
+            ];
+
+            let { data: profile } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[0]).single();
+            if (profile) userProfile = profile;
+            else {
+                let { data: profile2 } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[1]).single();
+                userProfile = profile2;
+            }
+
+            // Fallback: Coba format 08xx jika 628xx gagal
+            if (!userProfile && senderNumber.startsWith('62')) {
                 const localFormat = '0' + senderNumber.substring(2);
                 let { data: profile3 } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', localFormat).single();
                 if (profile3) userProfile = profile3;
             }
+            
+            // Jika ketemu profil via nomor HP, coba ambil tugas (mungkin diblokir RLS jika tabel private)
+            if (userProfile) {
+                const { data: t } = await authSupabase
+                    .from('tasks')
+                    .select('*')
+                    .eq('user_id', userProfile.id)
+                    .eq('status', 'active')
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                if (t) tasks = t;
+            }
         }
         
-        let taskContext = "User belum memiliki tugas.";
+        let taskContext = "";
         if (userProfile) {
-            const { data: tasks } = await authSupabase
-                .from('tasks')
-                .select('*')
-                .eq('user_id', userProfile.id)
-                .eq('status', 'active')
-                .order('created_at', { ascending: false })
-                .limit(10);
-                
             if (tasks && tasks.length > 0) {
                 taskContext = tasks.map((t, i) => `${i+1}. ${t.title} (Prioritas: ${t.priority}, Tenggat: ${t.due_date || '-'})`).join('\n');
             } else {
-                taskContext = "User tidak memiliki tugas aktif saat ini.";
+                taskContext = "User sudah terhubung, tapi tidak memiliki tugas aktif saat ini.";
             }
         } else {
-            // JANGAN BLOCKING! Biarkan AI tetap ramah, tapi beritahu statusnya.
-            // Kita ubah prompt context agar AI tidak menolak mentah-mentah.
-            taskContext = "INFO SISTEM: User ini belum terhubung ke database BuzzLab. Jawablah pertanyaannya dengan ramah. Jika dia minta tambah tugas, katakan bahwa kamu akan mencatatnya sementara (tapi ingatkan untuk daftar agar tersimpan permanen).";
+            // INFO PENTING: Beritahu AI bahwa user belum login, dan minta user untuk login
+            taskContext = `INFO PENTING: User ini BELUM TERHUBUNG ke database BuzzLab. 
+            Nomor WhatsApp mereka tidak ditemukan di sistem.
+            SARANKAN USER UNTUK MENGETIK: !login <email> <password>
+            Agar bot bisa mengenali mereka dan membaca tugas-tugasnya.
+            Jawab dengan ramah dan bantu mereka login.`;
         }
 
         // Tampilkan indikator mengetik...

@@ -1,4 +1,4 @@
-const { Client, LocalAuth, Buttons } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
@@ -152,40 +152,19 @@ const checkReminders = async () => {
 
                 console.log(`Sending reminder to ${phoneNumber} for "${task.title}"`);
                 
-                // Siapkan Pesan Teks Biasa (Fallback)
-                const msgText = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nKetik !done ${task.title} jika sudah selesai.`;
-
-                // Siapkan Tombol Interaktif
-                // Potong judul jika terlalu panjang agar muat di tombol
-                let safeTitle = task.title;
-                if (safeTitle.length > 15) safeTitle = safeTitle.substring(0, 15) + '...';
-                
-                // Buat unique identifier di text tombol agar kita bisa melacak tugasnya
-                const btnDone = `✅ Selesai: ${safeTitle}`;
-                const btnSnooze = `⏰ Tunda 15m: ${safeTitle}`;
-
-                const buttons = new Buttons(
-                    `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}`,
-                    [
-                        { body: btnDone },
-                        { body: btnSnooze }
-                    ],
-                    'BuzzLab Reminder', // Title
-                    'Pilih aksi di bawah:' // Footer
-                );
+                // Siapkan Pesan Teks (Tanpa Tombol karena Deprecated)
+                const msgText = `🔔 *REMINDER TUGAS* 🔔\n\n` +
+                                `Judul: *${task.title}*\n` +
+                                `Prioritas: ${task.priority}\n` +
+                                `Tenggat: ${task.due_date || '-'}\n\n` +
+                                `Ketik perintah di bawah untuk merespon:\n` +
+                                `✅ Selesai: *!done ${task.title}*\n` +
+                                `⏰ Tunda: *!snooze ${task.title}*`;
 
                 try {
-                    // Coba kirim tombol dulu
-                    await client.sendMessage(phoneNumber, buttons);
-                    console.log('Button sent successfully');
+                    await client.sendMessage(phoneNumber, msgText);
                 } catch (e) {
-                    console.error(`❌ Failed to send button, falling back to text:`, e.message);
-                    // Fallback ke text biasa jika tombol gagal (sering terjadi di Multi-Device)
-                    try {
-                        await client.sendMessage(phoneNumber, msgText);
-                    } catch (errText) {
-                        console.error('Failed to send fallback text:', errText);
-                    }
+                    console.error(`❌ Failed to send reminder text:`, e.message);
                 }
                     
                 // Update last_reminded_at via RPC
@@ -227,16 +206,19 @@ client.on('message_create', async msg => {
     const text = msg.body.trim();
 
     // Command Handling
-    // HANDLER RESPON TOMBOL
-    if (text.startsWith('✅ Selesai: ') || text.startsWith('⏰ Tunda 15m: ')) {
-        const isDone = text.startsWith('✅ Selesai: ');
-        const titleFragment = text.split(': ')[1].replace('...', '').trim();
+
+    // HANDLER !done <Judul> dan !snooze <Judul>
+    if (text.startsWith('!done ') || text.startsWith('!snooze ')) {
+        const isDone = text.startsWith('!done ');
+        const titleFragment = text.split(' ').slice(1).join(' ').trim(); // Ambil sisa teks setelah command
         
+        if (!titleFragment) {
+             msg.reply('⚠️ Harap sertakan judul tugas. Contoh: !done Rapat');
+             return;
+        }
+
         // Cari session login untuk user ini
         let session = sessions.get(sender);
-        
-        // Jika tidak ada session, kita perlu login-kan secara otomatis atau pakai RPC admin (authSupabase)
-        // Kita pakai authSupabase (admin) agar user tidak perlu login manual untuk klik tombol
         
         // Cari task berdasarkan judul (partial match) dan nomor WA
         const senderNumber = sender.replace('@c.us', '');
@@ -248,11 +230,11 @@ client.on('message_create', async msg => {
             .select('*')
             .eq('whatsapp_number', formattedNumber)
             .eq('status', 'active')
-            .ilike('title', `${titleFragment}%`)
+            .ilike('title', `%${titleFragment}%`) // Cari yang mengandung kata tersebut
             .limit(1);
 
         if (error || !tasks || tasks.length === 0) {
-            msg.reply(`⚠️ Maaf, tidak dapat menemukan tugas dengan judul "${titleFragment}". Mungkin sudah selesai atau judul terpotong.`);
+            msg.reply(`⚠️ Maaf, tidak dapat menemukan tugas aktif dengan judul yang mengandung "${titleFragment}".`);
             return;
         }
 
@@ -272,12 +254,7 @@ client.on('message_create', async msg => {
                 msg.reply(`✅ Mantap! Tugas *"${task.title}"* telah ditandai selesai.`);
             }
         } else {
-            // Logic Tunda 15 Menit
-            // Kita manipulasi last_reminded_at agar trigger lagi dalam 15 menit
-            // Rumus: LastReminded = Sekarang - (IntervalAsli_ms) + (15menit_ms)
-            // Sehingga: (Sekarang - LastReminded) = IntervalAsli - 15menit
-            // Sisa waktu = 15 menit.
-            
+            // Logic Tunda 15 Menit (!snooze)
             const intervalMs = (task.reminder_interval || 60) * 60 * 1000; // Default 60m jika null
             const snoozeMs = 15 * 60 * 1000;
             

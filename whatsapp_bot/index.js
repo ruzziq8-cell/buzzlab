@@ -7,7 +7,16 @@ const http = require('http');
 // Setup Puppeteer for Termux/Linux vs Windows
 let puppeteerConfig = {
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions']
+    args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-extensions',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu'
+    ]
 };
 
 if (process.env.PREFIX === '/data/data/com.termux/files/usr') {

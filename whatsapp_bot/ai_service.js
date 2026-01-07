@@ -38,33 +38,10 @@ TANYA/LIHAT => NO JSON!`;
     // Gabungkan pesan user dengan context
     const fullMessage = `CTX:${context}\nUSR:${userMessage}`;
 
-    // --- STRATEGI 1: POLLINATIONS.AI (Gratis, No Key) ---
-    try {
-        const response = await fetch("https://text.pollinations.ai/", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: fullMessage }
-                ],
-                model: 'openai', 
-                seed: 42,
-                jsonMode: false
-            })
-        });
-
-        if (!response.ok) throw new Error(`Status ${response.status}`);
-        return { text: await response.text() };
-
-    } catch (error) {
-        console.warn(`[AI] Pollinations Gagal (${error.message}). Coba Groq...`);
-    }
-
-    // --- STRATEGI 2: GROQ (Cepat, Limit 6000 TPM, 7 Key Rotation) ---
+    // --- STRATEGI 1: GROQ (Tercepat - LPU) ---
     try {
         const currentKey = getGroqKey();
-        // console.log(`[AI] Menggunakan Groq Key: ...${currentKey.slice(-5)}`);
+        // console.log(`[AI] Mencoba Groq...`);
 
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: 'POST',
@@ -78,7 +55,8 @@ TANYA/LIHAT => NO JSON!`;
                     { role: 'user', content: fullMessage }
                 ],
                 model: "llama-3.1-8b-instant"
-            })
+            }),
+            signal: AbortSignal.timeout(5000) // 5 Detik Timeout
         });
 
         if (!response.ok) throw new Error(`Status ${response.status}`);
@@ -86,10 +64,10 @@ TANYA/LIHAT => NO JSON!`;
         return { text: data.choices[0].message.content };
 
     } catch (groqError) {
-        console.warn(`[AI] Groq Gagal (${groqError.message}). Coba Gemini...`);
+        console.warn(`[AI] Groq Gagal/Lambat (${groqError.message}). Coba Gemini...`);
     }
 
-    // --- STRATEGI 3: GEMINI (Backup Terakhir) ---
+    // --- STRATEGI 2: GEMINI (Backup Cepat) ---
     try {
         const geminiKey = getGeminiKey();
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
@@ -100,21 +78,45 @@ TANYA/LIHAT => NO JSON!`;
                 contents: [{
                     parts: [{ text: `${systemPrompt}\n\n${fullMessage}` }]
                 }]
-            })
+            }),
+            signal: AbortSignal.timeout(8000) // 8 Detik Timeout
         });
 
         if (!response.ok) throw new Error(`Status ${response.status}`);
         const data = await response.json();
         
-        // Parsing respons Gemini yang unik
         let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error("Format respons Gemini tidak valid");
         
         return { text: text };
 
     } catch (geminiError) {
-        console.error(`[AI] Gemini Gagal:`, geminiError);
-        return { text: "Maaf, semua sistem AI (Pollinations, Groq, Gemini) sedang sibuk. Coba lagi 1 menit lagi! 🤖💤" };
+        console.warn(`[AI] Gemini Gagal (${geminiError.message}). Coba Pollinations...`);
+    }
+
+    // --- STRATEGI 3: POLLINATIONS.AI (Gratis, Backup Terakhir) ---
+    try {
+        const response = await fetch("https://text.pollinations.ai/", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: fullMessage }
+                ],
+                model: 'openai', 
+                seed: 42,
+                jsonMode: false
+            }),
+            signal: AbortSignal.timeout(10000) // 10 Detik Timeout
+        });
+
+        if (!response.ok) throw new Error(`Status ${response.status}`);
+        return { text: await response.text() };
+
+    } catch (error) {
+        console.error(`[AI] Semua Provider Gagal:`, error);
+        return { text: "Maaf, otak saya sedang nge-lag parah. Coba lagi nanti ya! 🤯" };
     }
 }
 

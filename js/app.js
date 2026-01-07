@@ -53,10 +53,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         },
         formatDate: (dateStr) => {
             if (!dateStr) return '';
-            return new Date(dateStr).toLocaleDateString('id-ID', { 
+            return new Date(dateStr).toLocaleString('id-ID', { 
+                timeZone: 'Asia/Jakarta',
                 weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
                 hour: '2-digit', minute: '2-digit'
-            });
+            }).replace(/\./g, ':');
         }
     };
 

@@ -7,6 +7,7 @@ const http = require('http');
 // Setup Puppeteer for Termux/Linux vs Windows
 let puppeteerConfig = {
     headless: true,
+    timeout: 120000, // Naikkan timeout ke 120 detik (2 menit) untuk HP lambat
     args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -15,7 +16,9 @@ let puppeteerConfig = {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-software-rasterizer', // Tambahan: matikan rasterizer software
+        '--disable-features=site-per-process' // Tambahan: hemat memori
     ]
 };
 

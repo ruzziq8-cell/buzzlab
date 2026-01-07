@@ -43,6 +43,9 @@ cat > "$BOOT_SCRIPT" <<EOF
 termux-wake-lock
 export PATH=\$PATH:/data/data/com.termux/files/usr/bin
 
+# Pindah ke folder project
+cd "$CURRENT_DIR"
+
 # Tunggu sebentar agar network siap (opsional)
 sleep 5
 

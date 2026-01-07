@@ -1,10 +1,12 @@
+require('dotenv').config();
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const http = require('http');
+const { processWithAI } = require('./ai_service');
 
-console.log('Bot Version: 2.1 (No Buttons - Text Only Mode)');
+console.log('Bot Version: 3.0 (AI Enabled)');
 
 // Setup Puppeteer for Termux/Linux vs Windows
 let puppeteerConfig = {
@@ -226,8 +228,20 @@ client.on('ready', () => {
 
 // Gunakan message_create agar bisa merespon pesan dari diri sendiri (Note to Self)
 client.on('message_create', async msg => {
-    // Abaikan pesan yang bukan command atau pesan dari status broadcast
-    if (!msg.body.startsWith('!') || msg.from === 'status@broadcast') return;
+    // Abaikan pesan dari status broadcast
+    if (msg.from === 'status@broadcast') return;
+
+    const text = msg.body.trim();
+    if (!text) return;
+
+    // SAFETY CHECK: Abaikan pesan dari bot sendiri (menghindari loop)
+    // Kecuali jika user menggunakan fitur "Note to Self", maka msg.fromMe = true.
+    // Kita bedakan berdasarkan konten: Jika diawali emoji bot, abaikan.
+    if (msg.id.fromMe) {
+        if (text.startsWith('🤖') || text.startsWith('🔔') || text.startsWith('✅') || text.startsWith('⏰') || text.startsWith('⚠️') || text.startsWith('❌')) {
+            return;
+        }
+    }
 
     // Cegah bot merespon balasannya sendiri (jika balasan mengandung tanda seru di awal - jarang terjadi tapi untuk keamanan)
     // msg.id.fromMe bernilai true jika pesan dikirim oleh akun host.
@@ -238,8 +252,7 @@ client.on('message_create', async msg => {
     const chat = await msg.getChat();
     // Untuk pesan 'Note to Self', msg.from adalah nomor kita sendiri.
     // msg.to juga nomor kita sendiri.
-    const sender = msg.from; 
-    const text = msg.body.trim();
+    const sender = msg.from;
 
     // Command Handling
 
@@ -547,6 +560,88 @@ client.on('message_create', async msg => {
                 // Remove from local cache
                 session.lastTasks.splice(index, 1);
             }
+        }
+    }
+
+    // ---------------------------------------------------------
+    // AI HANDLER (Untuk chat & perintah natural language)
+    // ---------------------------------------------------------
+    else {
+        // Hanya respon jika pesan cukup panjang (hindari "ok", "y")
+        if (text.length < 2) return;
+
+        // Fetch User Profile & Tasks for Context
+        const senderNumber = sender.replace('@c.us', '');
+        const formats = [
+            senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`, 
+            senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber
+        ];
+
+        let userProfile = null;
+        let { data: profile } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[0]).single();
+        if (profile) userProfile = profile;
+        else {
+            let { data: profile2 } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[1]).single();
+            userProfile = profile2;
+        }
+        
+        let taskContext = "User belum memiliki tugas.";
+        if (userProfile) {
+            const { data: tasks } = await authSupabase
+                .from('tasks')
+                .select('*')
+                .eq('user_id', userProfile.id)
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+                .limit(10);
+                
+            if (tasks && tasks.length > 0) {
+                taskContext = tasks.map((t, i) => `${i+1}. ${t.title} (Prioritas: ${t.priority}, Tenggat: ${t.due_date || '-'})`).join('\n');
+            } else {
+                taskContext = "User tidak memiliki tugas aktif saat ini.";
+            }
+        } else {
+            taskContext = "PERINGATAN: User ini belum terdaftar. Arahkan dia untuk menghubungi admin.";
+        }
+
+        // Tampilkan indikator mengetik...
+        const chat = await msg.getChat();
+        await chat.sendStateTyping();
+
+        // Proses ke AI
+        const aiResponse = await processWithAI(text, taskContext);
+
+        // Stop typing
+        await chat.clearStateTyping();
+
+        if (aiResponse.action === 'add_task') {
+            if (!userProfile) {
+                msg.reply('🤖 Maaf, nomor Anda belum terdaftar. Hubungi admin untuk registrasi.');
+                return;
+            }
+            
+            const taskData = aiResponse.data;
+            const newTask = {
+                user_id: userProfile.id,
+                title: taskData.title,
+                priority: taskData.priority || 'medium',
+                due_date: taskData.due_date || null,
+                reminder_interval: taskData.reminder_interval || 0,
+                status: 'active',
+                created_at: new Date().toISOString()
+            };
+
+            const { error } = await authSupabase.from('tasks').insert([newTask]);
+            
+            if (error) {
+                console.error('Add Task Error:', error);
+                msg.reply('🤖 Gagal menambahkan tugas. Coba lagi nanti.');
+            } else {
+                msg.reply(`🤖 Siap! Tugas *"${taskData.title}"* berhasil ditambahkan.`);
+            }
+
+        } else if (aiResponse.text) {
+            msg.reply(`🤖 ${aiResponse.text}`);
         }
     }
 });

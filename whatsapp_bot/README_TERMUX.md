@@ -1,42 +1,73 @@
-# Panduan Menjalankan Bot 24 Jam di Termux
+# 🤖 Panduan Lengkap Menjalankan BuzzLab Bot di Termux
 
-Karena **Termux:Boot** sudah tidak tersedia di Play Store (deprecated), berikut adalah solusinya.
+Ini adalah panduan step-by-step untuk menjalankan bot WhatsApp BuzzLab di HP Android menggunakan Termux.
 
-## 1. Agar Bot Jalan 24 Jam Nonstop (Anti Tidur)
-Fitur ini **TIDAK MEMERLUKAN** Termux:Boot. Cukup gunakan `Wake Lock`.
-Script `setup_autostart.sh` yang saya buat sudah otomatis mengaktifkannya.
+## 📋 Persiapan Awal
+1. **Download Termux** (Disarankan versi F-Droid, bukan Play Store).
+2. **Punya API Key Gemini** (Untuk fitur AI). Ambil gratis di: [Google AI Studio](https://aistudio.google.com/app/apikey).
+3. **Koneksi Internet** yang stabil.
 
-**Cara Cek:**
-Lihat notifikasi bar HP Anda. Jika ada notifikasi **"Termux - Wake lock held"**, berarti Termux tidak akan dimatikan oleh Android meskipun layar mati. Bot aman 24 jam.
+---
 
-Jika belum muncul, ketik perintah ini di Termux:
-```bash
-termux-wake-lock
-```
+## 🚀 Langkah 1: Instalasi Otomatis
+Saya sudah menyiapkan script otomatis. Anda hanya perlu menjalankan satu perintah.
 
-## 2. Agar Bot Jalan Otomatis Saat HP Restart (Autostart)
-Ini yang membutuhkan **Termux:Boot**.
+1. Buka Termux.
+2. Masuk ke folder bot (folder "buzzlab"):
+   ```bash
+   cd ~/buzzlab
+   ```
+3. Jalankan script setup:
+   ```bash
+   bash setup_termux.sh
+   ```
+4. Ikuti instruksi di layar:
+   - Script akan otomatis mengupdate sistem.
+   - Script akan meminta **API Key Gemini** Anda. Paste key-nya lalu tekan Enter.
+   - Tunggu proses instalasi selesai (bisa 5-10 menit tergantung internet).
 
-### Opsi A: Download dari F-Droid (Disarankan)
-1. Buka browser, cari **"Termux:Boot F-Droid"**.
-2. Download APK dan Install.
-3. **PENTING**: Jika gagal install (muncul error "App not installed"), itu karena Termux utama Anda berasal dari Play Store. Android tidak mengizinkan pencampuran versi Play Store dan F-Droid.
-   * **Solusi**: Abaikan saja fitur Autostart ini. Cukup jalankan manual setiap kali HP restart (lihat Opsi B). Jangan uninstall Termux lama jika tidak ingin setting ulang dari nol.
+---
 
-### Opsi B: Manual Start (Tanpa Termux:Boot)
-Jika Anda tidak bisa menginstall Termux:Boot, tidak masalah!
-Setiap kali HP Anda habis direstart/mati, cukup lakukan:
+## 🟢 Langkah 2: Menjalankan Bot
+Setelah instalasi selesai, saatnya menyalakan bot.
+
+1. Jalankan perintah start:
+   ```bash
+   pm2 start index.js --name buzzlab
+   ```
+2. Tunggu sebentar, lalu cek apakah QR Code sudah muncul. Biasanya muncul di log:
+   ```bash
+   pm2 logs buzzlab
+   ```
+   *(Tekan `Ctrl+C` untuk keluar dari tampilan log. Bot tetap jalan di background)*
+3. Scan QR Code menggunakan WhatsApp di HP Anda (Linked Devices).
+
+---
+
+## ⚡ Langkah 3: Membuat Bot Jalan 24 Jam (Autostart)
+Agar bot tidak mati saat layar HP mati atau setelah HP direstart.
+
+1. Jalankan script autostart:
+   ```bash
+   bash setup_autostart.sh
+   ```
+2. Jika diminta akses notifikasi/baterai, izinkan.
+3. Periksa notifikasi bar HP Anda. Pastikan ada tulisan **"Termux - Wake lock held"**.
+
+### ⚠️ Penting: Jika HP Direstart
+Karena Termux:Boot kadang bermasalah di beberapa HP, jika HP Anda mati/restart, lakukan ini untuk menghidupkan bot lagi:
+
 1. Buka Termux.
 2. Ketik:
    ```bash
    pm2 resurrect
    ```
-3. Bot akan kembali berjalan dengan status terakhir.
+3. Selesai! Bot kembali online.
 
 ---
 
-## Tips Tambahan
-Agar Termux tidak dibunuh oleh sistem Android (Samsung/Xiaomi/Oppo sering mematikan aplikasi background):
-1. Buka **Settings** HP -> **Apps** -> **Termux**.
-2. Masuk ke **Battery**.
-3. Pilih **Unrestricted** (atau "No Restrictions" / "Tidak Dibatasi").
+## 🛠️ Perintah Berguna Lainnya
+- **Matikan Bot:** `pm2 stop buzzlab`
+- **Restart Bot:** `pm2 restart buzzlab`
+- **Lihat Status:** `pm2 status`
+- **Lihat Error/Log:** `pm2 logs buzzlab`

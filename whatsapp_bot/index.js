@@ -735,11 +735,17 @@ client.on('message_create', async msg => {
                 if (actionData.action === 'create_task' && userProfile) {
                     const { title, priority, due_date, reminder_interval } = actionData.data;
                     
+                    // Fix Timezone: Asumsikan input AI "YYYY-MM-DD HH:mm" adalah WIB (UTC+7)
+                    let fixedDueDate = due_date;
+                    if (fixedDueDate && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(fixedDueDate)) {
+                        fixedDueDate = fixedDueDate.replace(' ', 'T') + ':00+07:00';
+                    }
+
                     const { error } = await authSupabase.from('tasks').insert([{
                         user_id: userProfile.id,
                         title: title || 'Tugas Baru',
                         priority: priority || 'medium',
-                        due_date: due_date || null,
+                        due_date: fixedDueDate || null,
                         reminder_interval: reminder_interval || null,
                         status: 'active'
                     }]);
@@ -769,7 +775,13 @@ client.on('message_create', async msg => {
                              if (updates.status === 'completed') updates.completed_at = new Date().toISOString();
                         }
                         if (priority) updates.priority = priority;
-                        if (due_date) updates.due_date = due_date;
+                        if (due_date) {
+                            let fixedDueDate = due_date;
+                            if (fixedDueDate && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(fixedDueDate)) {
+                                fixedDueDate = fixedDueDate.replace(' ', 'T') + ':00+07:00';
+                            }
+                            updates.due_date = fixedDueDate;
+                        }
                         if (reminder_interval) updates.reminder_interval = reminder_interval;
 
                         const { error } = await authSupabase.from('tasks').update(updates).eq('id', realTask.id);

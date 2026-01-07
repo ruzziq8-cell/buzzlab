@@ -72,6 +72,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable__MNgyCgZ98xSGsWc4z1lHg_zVKdyZZc';
 // State Management (In-memory for demo)
 // Map<phoneNumber, { access_token, user }>
 const sessions = new Map();
+// Anti-Spam / Anti-Loop Guard: Map<senderId, lastTimestamp>
+const lastRequestTime = new Map();
 
 // Client Initialization
 const client = new Client({
@@ -571,11 +573,26 @@ client.on('message_create', async msg => {
     // AI HANDLER (Untuk chat & perintah natural language)
     // ---------------------------------------------------------
     else {
+        // SAFETY GUARD: Matikan AI untuk pesan dari diri sendiri (Loop Prevention)
+        // Jika true, berarti pesan ini dikirim oleh BOT (atau user di Note to Self).
+        // Kita block agar bot tidak membalas balasannya sendiri terus menerus.
+        if (msg.fromMe) return;
+
         // PENTING: Jangan biarkan AI merespon pesan Command (!)
         if (text.startsWith('!')) return;
 
         // Hanya respon jika pesan cukup panjang (hindari "ok", "y")
         if (text.length < 2) return;
+
+        // RATE LIMITER: Cegah spam request ke AI (Max 1 request per 3 detik per user)
+        // Ini melindungi dari infinite loop jika user/bot mengirim pesan bertubi-tubi
+        const now = Date.now();
+        const lastTime = lastRequestTime.get(sender) || 0;
+        if (now - lastTime < 3000) {
+            console.warn(`[RATE LIMIT] Ignoring spam from ${sender}`);
+            return;
+        }
+        lastRequestTime.set(sender, now);
 
         // Fetch User Profile & Tasks for Context
         let userProfile = null;

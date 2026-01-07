@@ -189,11 +189,22 @@ const checkReminders = async () => {
 
                 console.log(`Sending reminder to ${phoneNumber} for "${task.title}" (Task #${taskNumber})`);
                 
+                // Format Tanggal
+                let dateStr = '-';
+                if (task.due_date) {
+                    try {
+                        dateStr = new Date(task.due_date).toLocaleString('id-ID', { 
+                            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', 
+                            hour: '2-digit', minute: '2-digit' 
+                        }).replace('.', ':'); // Fix separator jam di beberapa locale
+                    } catch (e) { dateStr = task.due_date; }
+                }
+
                 // Siapkan Pesan Teks (Tanpa Tombol karena Deprecated)
                 const msgText = `🔔 *REMINDER TUGAS* 🔔\n\n` +
                                 `Judul: *${task.title}*\n` +
                                 `Prioritas: ${task.priority}\n` +
-                                `Tenggat: ${task.due_date || '-'}\n\n` +
+                                `Tenggat: ${dateStr}\n\n` +
                                 `Ketik perintah di bawah untuk merespon:\n` +
                                 `✅ Selesai: *!done ${taskNumber}*\n` +
                                 `⏰ Tunda: *!snooze ${taskNumber}*`;
@@ -537,8 +548,15 @@ client.on('message_create', async msg => {
             } else {
                 let reply = '*Daftar Tugas Anda:*\n\n';
                 tasks.forEach((t, i) => {
-                    const dateStr = t.due_date ? ` [📅 ${t.due_date}]` : '';
-                    reply += `${i + 1}. ${t.title} [${t.priority}]${dateStr}\n`;
+                    let dStr = '';
+                    if (t.due_date) {
+                        try {
+                            dStr = ' [📅 ' + new Date(t.due_date).toLocaleString('id-ID', { 
+                                day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
+                            }).replace('.', ':') + ']';
+                        } catch (e) { dStr = ` [📅 ${t.due_date}]`; }
+                    }
+                    reply += `${i + 1}. ${t.title} [${t.priority}]${dStr}\n`;
                 });
                 // Store mapping for this user to select by index
                 session.lastTasks = tasks; 

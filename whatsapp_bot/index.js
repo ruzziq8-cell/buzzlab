@@ -153,27 +153,30 @@ const checkReminders = async () => {
                 }
 
                 // Hitung nomor urut tugas untuk user ini
-                // Kita gunakan formattedNumber yang konsisten
                 let taskNumber = '?';
                 try {
-                    console.log(`Debug: Fetching rank for number '${task.whatsapp_number}'`);
-                    const { data: userTasks, error: rankError } = await authSupabase
-                        .from('tasks')
+                    // Step 1: Dapatkan user_id dari profiles berdasarkan whatsapp_number
+                    const { data: profile, error: profileError } = await authSupabase
+                        .from('profiles')
                         .select('id')
-                        .eq('whatsapp_number', task.whatsapp_number) // Gunakan nomor dari task langsung
-                        .eq('status', 'active')
-                        .order('created_at', { ascending: false });
-    
-                    if (rankError) {
-                        console.error('Debug: Rank query error:', rankError.message);
-                    } else {
-                        console.log(`Debug: Found ${userTasks?.length} tasks for this user.`);
-                    }
+                        .eq('whatsapp_number', task.whatsapp_number)
+                        .single();
 
-                    if (!rankError && userTasks) {
-                        const taskIndex = userTasks.findIndex(t => t.id === task.id);
-                        taskNumber = taskIndex !== -1 ? taskIndex + 1 : '?';
-                        console.log(`Debug: Task ID ${task.id} is at index ${taskIndex} (Number ${taskNumber})`);
+                    if (profileError || !profile) {
+                         console.error('Debug: Could not find profile for number:', task.whatsapp_number);
+                    } else {
+                        // Step 2: Ambil semua tugas aktif milik user_id tersebut
+                        const { data: userTasks, error: rankError } = await authSupabase
+                            .from('tasks')
+                            .select('id')
+                            .eq('user_id', profile.id) // Gunakan user_id yang benar
+                            .eq('status', 'active')
+                            .order('created_at', { ascending: false });
+        
+                        if (!rankError && userTasks) {
+                            const taskIndex = userTasks.findIndex(t => t.id === task.id);
+                            taskNumber = taskIndex !== -1 ? taskIndex + 1 : '?';
+                        }
                     }
                 } catch (err) {
                     console.error('Error calculating task number:', err.message);
@@ -257,36 +260,45 @@ client.on('message_create', async msg => {
         // Cari task berdasarkan nomor urut (tanpa perlu session login bot)
         const senderNumber = sender.replace('@c.us', '');
         
-        // Coba variasi format nomor (dengan + dan tanpa +)
+        // Coba variasi format nomor untuk mencari profile
         const formats = [
             senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`, // Format +62
             senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber // Format 62
         ];
 
-        let tasks = [];
-        let error = null;
+        let userProfile = null;
+        
+        // Coba cari profile dengan format pertama
+        let { data: profile, error: profileError } = await authSupabase
+            .from('profiles')
+            .select('id')
+            .eq('whatsapp_number', formats[0])
+            .single();
 
-        // Coba fetch dengan format pertama
-        const res1 = await authSupabase
+        if (profile) {
+            userProfile = profile;
+        } else {
+            // Jika tidak ketemu, coba format kedua
+            const { data: profile2 } = await authSupabase
+                .from('profiles')
+                .select('id')
+                .eq('whatsapp_number', formats[1])
+                .single();
+            userProfile = profile2;
+        }
+
+        if (!userProfile) {
+            msg.reply('⚠️ Nomor Anda tidak terdaftar dalam sistem.');
+            return;
+        }
+
+        // Ambil semua tugas aktif user ini berdasarkan user_id
+        const { data: tasks, error } = await authSupabase
             .from('tasks')
             .select('*')
-            .eq('whatsapp_number', formats[0])
+            .eq('user_id', userProfile.id)
             .eq('status', 'active')
             .order('created_at', { ascending: false });
-        
-        if (res1.data && res1.data.length > 0) {
-            tasks = res1.data;
-        } else {
-            // Jika kosong, coba format kedua
-            const res2 = await authSupabase
-                .from('tasks')
-                .select('*')
-                .eq('whatsapp_number', formats[1])
-                .eq('status', 'active')
-                .order('created_at', { ascending: false });
-            tasks = res2.data;
-            error = res2.error;
-        }
 
         if (error || !tasks || tasks.length === 0) {
             msg.reply('⚠️ Tidak ada tugas aktif yang ditemukan.');

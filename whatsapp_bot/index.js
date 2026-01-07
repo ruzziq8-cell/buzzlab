@@ -246,6 +246,8 @@ client.on('message_create', async msg => {
     // Abaikan pesan dari status broadcast
     if (msg.from === 'status@broadcast') return;
 
+    console.log(`[MSG] From: ${msg.from} | Body: ${msg.body.substring(0, 50)}...`);
+
     const text = msg.body.trim();
     if (!text) return;
 

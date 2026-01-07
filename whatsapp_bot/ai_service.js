@@ -2,30 +2,17 @@
 // const fetch = require('node-fetch'); // HAPUS INI karena menyebabkan error MODULE_NOT_FOUND jika tidak diinstall
 
 async function processWithAI(userMessage, context = "") {
-    // === GANTI KE GROQ (LEBIH STABIL & GRATIS) ===
-    // Masukkan API Key Groq Anda di sini nanti
-    // Contoh: "gsk_8g..."
-    const apiKey = process.env.GROQ_API_KEY || "MASUKKAN_KEY_GROQ_DISINI"; 
+    // === SOLUSI PAMUNGKAS: POLLINATIONS.AI ===
+    // KELEBIHAN: GRATIS & TIDAK BUTUH API KEY SAMA SEKALI!
     
-    // Kita gunakan model Llama 3 (Cerdas & Cepat)
-    const url = "https://api.groq.com/openai/v1/chat/completions";
+    const url = "https://text.pollinations.ai/";
 
-    const payload = {
-        model: "llama3-8b-8192", // Model yang sangat cepat dan gratis
-        messages: [
-            {
-                role: "system",
-                content: `Kamu adalah asisten AI untuk "BuzzLab", aplikasi To-Do List.
+    // Format prompt sederhana
+    const systemPrompt = `Kamu adalah asisten AI untuk "BuzzLab", aplikasi To-Do List.
 Jawablah dengan santai, sopan, dan singkat dalam Bahasa Indonesia.
-Jangan terlalu formal. Gunakan emoji sesekali.`
-            },
-            {
-                role: "user",
-                content: `CONTEXT: ${context}\n\nUSER: ${userMessage}`
-            }
-        ],
-        temperature: 0.7
-    };
+Jangan terlalu formal. Gunakan emoji sesekali.`;
+
+    const fullPrompt = `${systemPrompt}\n\nCONTEXT: ${context}\n\nUSER: ${userMessage}`;
 
     // Cek apakah fetch tersedia (Node 18+)
     if (typeof fetch === 'undefined') {
@@ -34,36 +21,39 @@ Jangan terlalu formal. Gunakan emoji sesekali.`
     }
 
     try {
-        console.log(`[AI SERVICE] Mengirim request ke Groq...`);
+        console.log(`[AI SERVICE] Mengirim request ke Pollinations (No-Key)...`);
+        
+        // Pollinations menerima text body langsung atau JSON
         const response = await fetch(url, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `CONTEXT: ${context}\n\nUSER: ${userMessage}` }
+                ],
+                model: 'openai', // Menggunakan proxy OpenAI gratis mereka
+                seed: 42
+            })
         });
 
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[AI SERVICE] Error Groq: ${response.status} - ${errorText}`);
-            
-            if (response.status === 401) {
-                return { text: "⚠️ API Key Groq belum disetting atau salah." };
-            }
-            return { text: `⚠️ Error AI: ${response.status}` };
+            console.error(`[AI SERVICE] Error Pollinations: ${response.status}`);
+            return { text: "Maaf, server AI sedang sibuk. Coba lagi nanti." };
         }
 
-        const data = await response.json();
+        // Pollinations langsung mengembalikan teks jawaban (bukan JSON kompleks)
+        const text = await response.text();
         
-        if (!data.choices || data.choices.length === 0) {
-             return { text: "Maaf, AI sedang melamun (no response)." };
+        if (!text) {
+             return { text: "Maaf, AI tidak menjawab." };
         }
 
-        const text = data.choices[0].message.content;
         console.log(`[AI SERVICE] Sukses!`);
         
-        // Cek JSON Action (jika AI membalas dengan format JSON untuk aksi)
+        // Cek JSON Action
         try {
             const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
             if (cleanText.startsWith('{') && cleanText.endsWith('}')) {

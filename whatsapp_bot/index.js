@@ -255,8 +255,9 @@ client.on('message_create', async msg => {
     const sender = msg.from;
 
     // Command Handling
+    // Gunakan satu rantai if-else if raksasa untuk mencegah eksekusi ganda
 
-    // HANDLER !done <Nomor> dan !snooze <Nomor>
+    // 1. HANDLER !done & !snooze
     if (text.startsWith('!done ') || text.startsWith('!snooze ')) {
         const isDone = text.startsWith('!done ');
         const args = text.split(' ');
@@ -358,16 +359,18 @@ client.on('message_create', async msg => {
                 msg.reply(`⏰ Oke, saya ingatkan lagi soal *"${task.title}"* dalam 15 menit.`);
             }
         }
-        return; // Stop processing other commands
+        return; 
     }
 
-    if (text.startsWith('!trigger')) {
+    // 2. HANDLER !trigger
+    else if (text.startsWith('!trigger')) {
         msg.reply('Memicu pengecekan reminder manual...');
         await checkReminders();
         msg.reply('Pengecekan selesai. Cek log terminal.');
     }
 
-    if (text.startsWith('!help')) {
+    // 3. HANDLER !help
+    else if (text.startsWith('!help')) {
         msg.reply(
             `*BuzzLab Bot Help*\n\n` +
             `Gunakan perintah berikut:\n` +
@@ -379,6 +382,7 @@ client.on('message_create', async msg => {
         );
     } 
     
+    // 4. HANDLER !add
     else if (text.startsWith('!add')) {
         let rawInput = text.slice(4).trim(); // !add length is 4
         if (!rawInput) {

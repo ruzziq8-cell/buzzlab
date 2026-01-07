@@ -154,22 +154,21 @@ const checkReminders = async () => {
 
                 // Hitung nomor urut tugas untuk user ini
                 // Kita gunakan formattedNumber yang konsisten
-                const { data: userTasks, error: rankError } = await authSupabase
-                    .from('tasks')
-                    .select('id')
-                    .eq('whatsapp_number', task.whatsapp_number) // Gunakan nomor dari task langsung
-                    .eq('status', 'active')
-                    .order('created_at', { ascending: false });
-
-                if (rankError) {
-                    console.error('Error fetching rank:', rankError);
-                }
-
-                const taskIndex = userTasks ? userTasks.findIndex(t => t.id === task.id) : -1;
-                const taskNumber = taskIndex !== -1 ? taskIndex + 1 : '?';
-
-                if (taskNumber === '?') {
-                    console.warn(`Could not find task ID ${task.id} in user list. List length: ${userTasks?.length}`);
+                let taskNumber = '?';
+                try {
+                    const { data: userTasks, error: rankError } = await authSupabase
+                        .from('tasks')
+                        .select('id')
+                        .eq('whatsapp_number', task.whatsapp_number) // Gunakan nomor dari task langsung
+                        .eq('status', 'active')
+                        .order('created_at', { ascending: false });
+    
+                    if (!rankError && userTasks) {
+                        const taskIndex = userTasks.findIndex(t => t.id === task.id);
+                        taskNumber = taskIndex !== -1 ? taskIndex + 1 : '?';
+                    }
+                } catch (err) {
+                    console.error('Error calculating task number:', err.message);
                 }
 
                 console.log(`Sending reminder to ${phoneNumber} for "${task.title}" (Task #${taskNumber})`);
@@ -189,17 +188,21 @@ const checkReminders = async () => {
                     console.error(`❌ Failed to send reminder text:`, e.message);
                 }
                     
-                // Update last_reminded_at via RPC
-                await authSupabase.rpc('update_last_reminded', {
-                    task_id: task.id,
-                    new_time: now.toISOString()
-                });
+                // Update last_reminded_at via UPDATE biasa (bukan RPC, untuk menghindari masalah permissions/rpc)
+                const { error: updateError } = await authSupabase
+                    .from('tasks')
+                    .update({ last_reminded_at: now.toISOString() })
+                    .eq('id', task.id);
+
+                if (updateError) {
+                    console.error('Failed to update last_reminded_at:', updateError.message);
+                }
             }
     }
 };
 
-// Run checkReminders every 5 seconds (to support the 5-sec interval)
-setInterval(checkReminders, 5 * 1000);
+// Run checkReminders every 10 seconds (less frequent to avoid congestion)
+setInterval(checkReminders, 10 * 1000);
 
 client.on('qr', (qr) => {
     console.log('SCAN QR CODE INI MENGGUNAKAN WHATSAPP ANDA:');

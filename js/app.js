@@ -94,12 +94,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const { data, error } = await window.supabaseClient
                     .from('profiles')
                     .select('whatsapp_number')
-                    .eq('id', currentUser.id)
-                    .single();
-                
-                if (data && data.whatsapp_number) {
-                    waInput.value = data.whatsapp_number;
-                }
+                .eq('id', currentUser.id)
+                .maybeSingle();
+            
+            if (data && data.whatsapp_number) {
+                waInput.value = data.whatsapp_number;
+            }
             } catch (err) {
                 console.error('Error fetching WA number:', err);
             }
@@ -529,21 +529,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Toggle Task
     const toggleTask = async (id, currentStatus) => {
         const newStatus = currentStatus === 'active' ? 'completed' : 'active';
+        const completedAt = newStatus === 'completed' ? new Date().toISOString() : null;
         
         const taskIndex = tasks.findIndex(t => t.id === id);
         if (taskIndex > -1) {
             tasks[taskIndex].status = newStatus;
+            tasks[taskIndex].completed_at = completedAt;
             renderTasks();
         }
 
         const { error } = await window.supabaseClient
             .from('tasks')
-            .update({ status: newStatus })
+            .update({ 
+                status: newStatus,
+                completed_at: completedAt
+            })
             .eq('id', id);
 
         if (error) {
             console.error('Error updating task:', error);
             tasks[taskIndex].status = currentStatus;
+            tasks[taskIndex].completed_at = currentStatus === 'completed' ? new Date().toISOString() : null; 
             renderTasks();
         }
     };
@@ -684,7 +690,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 : 0;
 
             if (sortedTasks.length === 0) {
-                tableRows = '<tr><td colspan="5" style="text-align:center">Tidak ada tugas.</td></tr>';
+                tableRows = '<tr><td colspan="6" style="text-align:center">Tidak ada tugas.</td></tr>';
             } else {
                 sortedTasks.forEach((task, index) => {
                     const statusClass = task.status === 'active' ? 'status-active' : 'status-completed';
@@ -696,6 +702,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const isOverdue = task.status === 'active' && task.due_date && task.due_date < todayStr;
                     const dateStyle = isOverdue ? 'color: var(--danger-color); font-weight: bold;' : '';
                     const dateDisplay = isOverdue ? `${dueDate} (Terlambat)` : dueDate;
+                    
+                    let completedAtDisplay = '-';
+                    if (task.status === 'completed') {
+                        if (task.completed_at) {
+                            const doneDate = new Date(task.completed_at);
+                            completedAtDisplay = doneDate.toLocaleDateString('id-ID', {
+                                 day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                            });
+                        } else {
+                            completedAtDisplay = '<span style="color: #999; font-style: italic;">(Tak tercatat)</span>';
+                        }
+                    }
 
                     tableRows += `
                         <tr>
@@ -707,6 +725,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <td style="${dateStyle}">${dateDisplay}</td>
                             <td class="${priorityClass}" style="text-transform:capitalize">${task.priority}</td>
                             <td class="${statusClass}">${statusLabel}</td>
+                            <td>${completedAtDisplay}</td>
                         </tr>
                     `;
                 });
@@ -747,10 +766,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <thead>
                         <tr>
                             <th style="width: 5%">No</th>
-                            <th style="width: 45%">Tugas & Deskripsi</th>
+                            <th style="width: 35%">Tugas & Deskripsi</th>
                             <th style="width: 15%">Tenggat</th>
-                            <th style="width: 15%">Prioritas</th>
-                            <th style="width: 20%">Status</th>
+                            <th style="width: 10%">Prioritas</th>
+                            <th style="width: 15%">Status</th>
+                            <th style="width: 20%">Selesai Pada</th>
                         </tr>
                     </thead>
                     <tbody>

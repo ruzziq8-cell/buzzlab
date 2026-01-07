@@ -652,17 +652,21 @@ client.on('message_create', async msg => {
         }
 
         // Proses dengan AI
-        await client.sendMessage(sender, "⏳");
+        // await client.sendMessage(sender, "⏳"); // Hapus indikator loading yang mengganggu
         const aiResponse = await processWithAI(text, taskContext);
         
         // Cek apakah ada JSON Action di dalam respon AI
         const jsonMatch = aiResponse.text.match(/```json\s*([\s\S]*?)\s*```/);
+        
+        // Default reply adalah teks dari AI (bersihkan JSON jika ada)
         let finalReply = aiResponse.text;
+        if (jsonMatch) {
+            finalReply = aiResponse.text.replace(jsonMatch[0], '').trim(); // Selalu hapus JSON dari chat
+        }
 
         if (jsonMatch) {
             try {
                 const actionData = JSON.parse(jsonMatch[1]);
-                const cleanReply = aiResponse.text.replace(jsonMatch[0], '').trim();
                 
                 if (actionData.action === 'create_task' && userProfile) {
                     const { title, priority, due_date } = actionData.data;
@@ -677,9 +681,9 @@ client.on('message_create', async msg => {
                     }]);
 
                     if (!error) {
-                        finalReply = `${cleanReply}\n\n✅ *Sukses!* Tugas "${title}" berhasil disimpan ke database.`;
+                        finalReply += `\n\n✅ *Sukses!* Tugas "${title}" berhasil disimpan.`;
                     } else {
-                        finalReply = `${cleanReply}\n\n❌ *Gagal menyimpan:* ${error.message}`;
+                        finalReply += `\n\n❌ *Gagal menyimpan:* ${error.message}`;
                     }
                 }
             } catch (e) {
@@ -688,7 +692,7 @@ client.on('message_create', async msg => {
         }
 
         // Kirim balasan final (Teks AI + Status Aksi)
-        await client.sendMessage(sender, finalReply);
+        if (finalReply) await client.sendMessage(sender, finalReply);
     }
 });
 

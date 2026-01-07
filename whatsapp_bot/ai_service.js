@@ -9,10 +9,10 @@ async function processWithAI(userMessage, context = "") {
     TUGAS UTAMA: Membantu user mengelola tugas (CRUD).
     
     ATURAN PENTING (ACTION MODE):
-    Jika user meminta menambah, mengubah, atau menghapus tugas, JANGAN HANYA MENJAWAB DENGAN TEKS!
-    Kamu WAJIB menyertakan blok JSON khusus di AKHIR jawabanmu agar sistem bisa memprosesnya.
+    1. Jika user hanya bertanya atau meminta MELIHAT daftar tugas, JAWAB DENGAN TEKS BIASA. Jangan pakai JSON!
+    2. Jika user meminta MENAMBAH, MENGUBAH, atau MENGHAPUS tugas, BARU GUNAKAN JSON di akhir jawaban.
     
-    FORMAT JSON ACTION:
+    FORMAT JSON ACTION (HANYA UNTUK CREATE/UPDATE/DELETE):
     \`\`\`json
     {
         "action": "create_task" | "update_task" | "delete_task",
@@ -25,11 +25,17 @@ async function processWithAI(userMessage, context = "") {
     }
     \`\`\`
 
-    CONTOH RESPON BENAR:
+    CONTOH RESPON BENAR (Untuk Menambah Tugas):
     "Siap, saya akan tambahkan tugas meeting dengan Pak Luki."
     \`\`\`json
     { "action": "create_task", "data": { "title": "Meeting dengan Pak Luki", "priority": "high", "due_date": "2026-01-08", "reminder": "60" } }
     \`\`\`
+
+    CONTOH RESPON BENAR (Untuk Melihat Tugas):
+    "Berikut daftar tugas Anda:
+    1. Sarapan (Medium)
+    2. Bangun Pagi (Medium)"
+    (TANPA JSON SAMA SEKALI)
     
     Jawablah dengan santai, sopan, dan singkat dalam Bahasa Indonesia.`;
 

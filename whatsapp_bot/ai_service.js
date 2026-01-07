@@ -68,12 +68,12 @@ AI: \`\`\`json
 
 User: "Ingatkan rapat besok jam 9"
 AI: \`\`\`json
-{"action":"create_task","data":{"title":"Rapat","due_date":"2026-01-09","priority":"high"}}
+{"action":"create_task","data":{"title":"Rapat","due_date":"2026-01-09 09:00","priority":"high"}}
 \`\`\`
 
-User: "tambahkan tugas ketemu pak luki tanggal 2026-10-24 set reminder 60 menit"
+User: "tambahkan tugas ketemu pak luki jam 20:00 tanggal 2026-01-10 set reminder 60 menit"
 AI: \`\`\`json
-{"action":"create_task","data":{"title":"Ketemu Pak Luki","due_date":"2026-10-24","priority":"medium","reminder_interval":60}}
+{"action":"create_task","data":{"title":"Ketemu Pak Luki","due_date":"2026-01-10 20:00","priority":"medium","reminder_interval":60}}
 \`\`\`
 
 ATURAN UTAMA:

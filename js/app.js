@@ -54,7 +54,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         formatDate: (dateStr) => {
             if (!dateStr) return '';
             return new Date(dateStr).toLocaleDateString('id-ID', { 
-                weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' 
+                weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
             });
         }
     };
@@ -309,7 +310,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (dateFilter === 'all') return true;
             if (!task.due_date) return false;
 
-            const taskDateStr = task.due_date; // YYYY-MM-DD
+            const taskDateStr = task.due_date.substring(0, 10); // YYYY-MM-DD
             const localTodayStr = DateUtils.getLocalYMD(new Date());
 
             if (dateFilter === 'today') {
@@ -582,7 +583,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('edit-task-desc').value = task.description || '';
         document.getElementById('edit-task-tags').value = task.tags ? task.tags.join(', ') : '';
         document.getElementById('edit-task-priority').value = task.priority;
-        document.getElementById('edit-task-date').value = task.due_date || '';
+        // Handle ISO string for datetime-local (YYYY-MM-DDTHH:mm)
+        let dateVal = '';
+        if (task.due_date) {
+            dateVal = task.due_date.length > 16 ? task.due_date.substring(0, 16) : task.due_date;
+        }
+        document.getElementById('edit-task-date').value = dateVal;
         
         const reminderSelect = document.getElementById('edit-task-reminder');
         if (reminderSelect) {

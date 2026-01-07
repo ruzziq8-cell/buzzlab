@@ -659,10 +659,10 @@ client.on('message_create', async msg => {
         let taskContext = "";
         if (userProfile) {
             if (tasks && tasks.length > 0) {
-                // Format ringkas: 1.Judul[P]|Date (Hemat Token)
-                taskContext = tasks.map((t, i) => `${i+1}.${t.title}[${t.priority?t.priority.charAt(0).toUpperCase():'M'}]${t.due_date?`|${t.due_date}`:''}`).join('\n');
+                // Format lebih jelas agar AI tidak bingung (Priority & Date explicit)
+                taskContext = tasks.map((t, i) => `${i+1}. ${t.title} (Prioritas: ${t.priority || 'medium'}, Deadline: ${t.due_date || '-'})`).join('\n');
             } else {
-                taskContext = "NO_TASKS";
+                taskContext = "TIDAK ADA TUGAS.";
             }
         } else {
             // INFO PENTING: Beritahu AI bahwa user belum login

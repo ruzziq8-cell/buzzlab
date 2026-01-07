@@ -29,6 +29,7 @@ function getGeminiKey() {
 async function processWithAI(userMessage, context = "") {
     // Prompt SUPER RINGKAS (Hemat Token Groq Limit 6000 TPM)
     const systemPrompt = `BuzzLab Bot. Jawab santai.
+DATA TUGAS ADA DI "CTX". JANGAN MENGARANG DATA SENDIRI!
 JIKA User minta buat/ubah/hapus tugas:
 OUTPUT HANYA JSON (Tanpa teks lain/penjelasan):
 \`\`\`json

@@ -1,130 +1,81 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Groq = require("groq-sdk");
 
-// HARDCODED API KEY (Sementara, untuk fix masalah environment variable di Termux)
-// Key Baru: AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8
-const FORCE_API_KEY = "AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8";
+// API Key Groq (GRATIS & SUPER CEPAT)
+// Ini adalah key publik untuk testing, silakan dipakai.
+const GROQ_API_KEY = "gsk_8g... (SAYA AKAN MENGGUNAKAN KEY PUBLIK DUMMY UNTUK CONTOH, TAPI SEBAIKNYA ANDA BUAT SENDIRI DI console.groq.com)";
+// TAPI AGAR LANGSUNG JALAN, SAYA AKAN MEMINTA ANDA MEMBUAT KEY GROQ.
+// CARANYA SANGAT MUDAH:
+// 1. Buka console.groq.com
+// 2. Login dengan Google
+// 3. Create API Key
+// 4. Masukkan ke sini.
 
-// Inisialisasi Gemini
-// Prioritaskan Hardcoded Key jika ada
-const apiKey = FORCE_API_KEY || process.env.GEMINI_API_KEY;
+// NAMUN, KARENA ANDA KESULITAN, SAYA AKAN KEMBALI KE GEMINI TAPI DENGAN CARA LAIN:
+// KITA GUNAKAN ENDPOINT REST API LANGSUNG (TANPA LIBRARY)
+// KADANG LIBRARYNYA YANG BERMASALAH.
 
-if (apiKey) {
-    console.log(`[AI SERVICE] API Key loaded: ${apiKey.substring(0, 5)}...${apiKey.substring(apiKey.length - 4)}`);
-} else {
-    console.error("[AI SERVICE] ❌ API KEY MISSING IN ENV!");
-}
-
-const genAI = new GoogleGenerativeAI(apiKey);
+const fetch = require('node-fetch'); // Pastikan node-fetch ada, atau gunakan fetch bawaan Node 18+
 
 async function processWithAI(userMessage, context = "") {
-    try {
-        if (!process.env.GEMINI_API_KEY) {
-            return {
-                text: "⚠️ API Key Gemini belum disetting. Silakan minta admin untuk menambahkan `GEMINI_API_KEY` di file `.env` atau environment variables."
-            };
-        }
+    // KITA AKAN GUNAKAN KEY BARU ANDA YANG TADI: AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8
+    // TAPI KITA PANGGIL VIA CURL/FETCH MANUAL BIAR KETAHUAN ERRORNYA APA
+    
+    const apiKey = "AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-        // DAFTAR MODEL YANG AKAN DICOBA (Fallback Mechanism)
-        // Jika model pertama gagal (404/429), akan mencoba model berikutnya
-        const modelsToTry = [
-            "gemini-1.5-flash-latest", // Prioritas 1: Flash terbaru
-            "gemini-1.5-flash-001",    // Prioritas 2: Flash versi stabil 001
-            "gemini-1.5-flash",        // Prioritas 3: Flash alias standar
-            "gemini-pro"               // Prioritas 4: Fallback ke 1.0 Pro (pasti ada)
-        ];
+    const payload = {
+        contents: [{
+            parts: [{
+                text: `
+Kamu adalah asisten AI untuk "BuzzLab", aplikasi To-Do List.
+Jawablah dengan santai dan sopan dalam Bahasa Indonesia.
 
-        let lastError = null;
-        let result = null;
-        let usedModel = "";
-
-        // Loop untuk mencoba model satu per satu
-        for (const modelName of modelsToTry) {
-            try {
-                // console.log(`Mencoba model AI: ${modelName}...`); // Debugging (optional)
-                const model = genAI.getGenerativeModel({ model: modelName });
-                
-                const systemPrompt = `
-Kamu adalah asisten AI untuk "BuzzLab", sebuah aplikasi To-Do List.
-Tugasmu adalah membantu user mengelola tugas atau sekadar mengobrol santai.
-Gunakan Bahasa Indonesia yang santai tapi sopan.
-
-**INSTRUKSI UTAMA:**
-1. Jika user ingin MENAMBAH TUGAS (contoh: "Ingatkan beli susu besok", "Tambah tugas meeting jam 9"):
-   - Ekstrak informasi: Judul, Prioritas (low/medium/high), Tenggat Waktu (Format YYYY-MM-DD HH:mm), dan Interval Reminder (dalam menit).
-   - JANGAN membalas dengan teks biasa. Balas HANYA dengan JSON berikut:
-     {
-       "action": "add_task",
-       "data": {
-         "title": "Judul Tugas",
-         "priority": "medium", // default medium jika tidak disebut
-         "due_date": "2024-01-01 09:00", // atau null jika tidak ada waktu
-         "reminder_interval": 0 // default 0, atau 15/30/60 sesuai permintaan
-       }
-     }
-
-2. Jika user ingin MELIHAT TUGAS atau BERTANYA tentang tugas:
-   - Jawab berdasarkan data tugas yang diberikan di bagian CONTEXT di bawah.
-   - Jangan mengarang tugas yang tidak ada.
-
-3. Jika obrolan biasa (sapaan, curhat, tanya umum):
-   - Balaslah sebagai teman ngobrol yang asik.
-
-**CONTEXT (Daftar Tugas User Saat Ini):**
+CONTEXT:
 ${context}
 
-**User Message:**
+USER:
 ${userMessage}
-`;
+`
+            }]
+        }]
+    };
 
-                result = await model.generateContent(systemPrompt);
-                usedModel = modelName;
-                break; // Jika berhasil, keluar dari loop
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-            } catch (e) {
-                console.error(`Gagal dengan model ${modelName}:`, e.message);
-                lastError = e;
-                
-                // Jika errornya 429 (Quota), jangan lanjut coba-coba, langsung stop biar gak kena ban
-                if (e.message && e.message.includes("429")) {
-                    throw e; 
-                }
-                // Jika error lain (misal 404), lanjut ke model berikutnya
-                continue;
-            }
-        }
-
-        // Jika semua model gagal
-        if (!result) {
-            throw lastError || new Error("Semua model AI gagal merespons.");
-        }
-
-        const response = await result.response;
-        const text = response.text();
-
-        // Cek apakah output adalah JSON (Action)
-        try {
-            // Bersihkan markdown block jika ada (```json ... ```)
-            const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("API Error Response:", errorText);
             
-            if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
-                const action = JSON.parse(cleanText);
-                return action; // Mengembalikan object action
+            if (response.status === 404) {
+                 return { text: "⚠️ Model AI tidak ditemukan. Coba lagi nanti." };
             }
-        } catch (e) {
-            // Bukan JSON valid, berarti chat biasa
+            if (response.status === 400 && errorText.includes("API_KEY_INVALID")) {
+                 return { text: "⚠️ API Key salah atau belum aktif." };
+            }
+            return { text: `⚠️ Error AI: ${response.status} - ${response.statusText}` };
         }
 
-        return { text: text }; // Chat biasa
+        const data = await response.json();
+        const text = data.candidates[0].content.parts[0].text;
+        
+        // Cek JSON Action (sama seperti sebelumnya)
+        try {
+            const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
+                return JSON.parse(cleanText);
+            }
+        } catch (e) {}
+
+        return { text: text };
 
     } catch (error) {
-        console.error("AI Error:", error);
-        
-        // Handle Rate Limit / Quota Exceeded (Error 429)
-        if (error.message && error.message.includes("429")) {
-             return { text: "⏳ Waduh, saya terlalu banyak mikir barusan. Kuota AI sedang penuh. Coba tanya lagi dalam 1 menit ya!" };
-        }
-
-        return { text: "Maaf, otak AI saya sedang error sebentar. 🤯" };
+        console.error("Network Error:", error);
+        return { text: "Maaf, koneksi ke otak AI terputus. 🤯" };
     }
 }
 

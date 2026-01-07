@@ -499,7 +499,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             priority: priority,
             due_date: date || null,
             tags: tags,
-            reminder_interval: parseInt(reminder) || 0,
+            reminder_interval: Number(reminder) || 0,
             updated_at: new Date().toISOString()
         };
 

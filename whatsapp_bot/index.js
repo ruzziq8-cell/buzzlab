@@ -606,13 +606,28 @@ client.on('message_create', async msg => {
 
         // Tampilkan indikator mengetik...
         const chat = await msg.getChat();
-        await chat.sendStateTyping();
+        
+        // Cek kemampuan chat sebelum memanggil fungsi typing
+        // Di versi wwebjs terbaru atau di grup tertentu, fungsi ini kadang tidak tersedia
+        try {
+            if (typeof chat.sendStateTyping === 'function') {
+                await chat.sendStateTyping();
+            }
+        } catch (e) {
+            // Ignore typing error
+        }
 
         // Proses ke AI
         const aiResponse = await processWithAI(text, taskContext);
 
         // Stop typing
-        await chat.clearStateTyping();
+        try {
+            if (typeof chat.clearStateTyping === 'function') {
+                await chat.clearStateTyping();
+            }
+        } catch (e) {
+            // Ignore clear typing error
+        }
 
         if (aiResponse.action === 'add_task') {
             if (!userProfile) {

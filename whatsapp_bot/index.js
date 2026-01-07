@@ -552,6 +552,7 @@ client.on('message_create', async msg => {
                     if (t.due_date) {
                         try {
                             dStr = ' [📅 ' + new Date(t.due_date).toLocaleString('id-ID', { 
+                                timeZone: 'Asia/Jakarta',
                                 day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
                             }).replace('.', ':') + ']';
                         } catch (e) { dStr = ` [📅 ${t.due_date}]`; }
@@ -737,8 +738,12 @@ client.on('message_create', async msg => {
                     
                     // Fix Timezone: Asumsikan input AI "YYYY-MM-DD HH:mm" adalah WIB (UTC+7)
                     let fixedDueDate = due_date;
-                    if (fixedDueDate && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(fixedDueDate)) {
-                        fixedDueDate = fixedDueDate.replace(' ', 'T') + ':00+07:00';
+                    console.log('[DEBUG AI] Create Task Raw DueDate:', due_date);
+                    if (fixedDueDate && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(fixedDueDate)) {
+                        let isoBase = fixedDueDate.replace(' ', 'T');
+                        if (isoBase.length === 16) isoBase += ':00';
+                        fixedDueDate = isoBase + '+07:00';
+                        console.log('[DEBUG AI] Fixed DueDate (WIB):', fixedDueDate);
                     }
 
                     const { error } = await authSupabase.from('tasks').insert([{
@@ -777,8 +782,12 @@ client.on('message_create', async msg => {
                         if (priority) updates.priority = priority;
                         if (due_date) {
                             let fixedDueDate = due_date;
-                            if (fixedDueDate && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(fixedDueDate)) {
-                                fixedDueDate = fixedDueDate.replace(' ', 'T') + ':00+07:00';
+                            console.log('[DEBUG AI] Update Task Raw DueDate:', due_date);
+                            if (fixedDueDate && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(fixedDueDate)) {
+                                let isoBase = fixedDueDate.replace(' ', 'T');
+                                if (isoBase.length === 16) isoBase += ':00';
+                                fixedDueDate = isoBase + '+07:00';
+                                console.log('[DEBUG AI] Fixed DueDate (WIB):', fixedDueDate);
                             }
                             updates.due_date = fixedDueDate;
                         }

@@ -74,7 +74,7 @@ async function processWithAI(userMessage, context = "") {
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: `CONTEXT:\n${context}\n\nUSER: ${userMessage}` }
                 ],
-                model: "llama3-8b-8192"
+                model: "llama-3.1-8b-instant"
             })
         });
 

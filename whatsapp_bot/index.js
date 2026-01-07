@@ -151,15 +151,24 @@ const checkReminders = async () => {
                 }
 
                 // Hitung nomor urut tugas untuk user ini
-                const { data: userTasks } = await authSupabase
+                // Kita gunakan formattedNumber yang konsisten
+                const { data: userTasks, error: rankError } = await authSupabase
                     .from('tasks')
                     .select('id')
-                    .eq('whatsapp_number', task.whatsapp_number)
+                    .eq('whatsapp_number', task.whatsapp_number) // Gunakan nomor dari task langsung
                     .eq('status', 'active')
                     .order('created_at', { ascending: false });
 
+                if (rankError) {
+                    console.error('Error fetching rank:', rankError);
+                }
+
                 const taskIndex = userTasks ? userTasks.findIndex(t => t.id === task.id) : -1;
                 const taskNumber = taskIndex !== -1 ? taskIndex + 1 : '?';
+
+                if (taskNumber === '?') {
+                    console.warn(`Could not find task ID ${task.id} in user list. List length: ${userTasks?.length}`);
+                }
 
                 console.log(`Sending reminder to ${phoneNumber} for "${task.title}" (Task #${taskNumber})`);
                 

@@ -86,11 +86,14 @@ AI: \`\`\`json
 {"action":"create_task","data":{"title":"Makan Siang","due_date":"2026-01-09 12:30","priority":"medium"}}
 \`\`\`
 
-ATURAN UTAMA:
-1. KALAU USER MINTA UPDATE/CREATE/DELETE -> WAJIB OUTPUT JSON. JANGAN CUMA NGOMONG "SIAP" ATAU "DONE".
+ATURAN UTAMA (WAJIB PATUH ATAU SYSTEM ERROR):
+1. JIKA USER INGIN MEMBUAT/MENGUBAH/MENGHAPUS TUGAS -> WAJIB, HARUS, KUDU OUTPUT JSON.
+   JANGAN output teks biasa seperti "Siap bos" tanpa JSON. JSON adalah satu-satunya cara tugas tersimpan.
 2. 'id' di JSON harus sesuai dengan NOMOR URUT di daftar tugas yang kamu lihat di context (1, 2, 3...), BUKAN ID acak.
-3. FORMAT TANGGAL WAJIB: "YYYY-MM-DD HH:mm" (Contoh: "2026-01-15 20:00"). JANGAN LUPA JAMNYA!
-4. KALAU CUMA NGOBROL -> JANGAN PAKE JSON. Jawab yang asik dan frontal!`;
+3. FORMAT TANGGAL WAJIB: "YYYY-MM-DD HH:mm" (Contoh: "2026-01-15 20:00").
+4. JIKA USER CUMA NGOBROL (Gak ada perintah tugas) -> BARU BOLEH NGOMONG SANTAI TANPA JSON.
+
+PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
 
     // Masukkan Context ke System Prompt agar lebih kuat
     const systemPrompt = `${baseSystemPrompt}\n\nDATA TUGAS USER SAAT INI:\n${context}`;

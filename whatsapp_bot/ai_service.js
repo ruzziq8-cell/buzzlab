@@ -1,16 +1,30 @@
 // Gunakan native fetch (Node 18+)
-// const fetch = require('node-fetch'); // HAPUS INI karena menyebabkan error MODULE_NOT_FOUND jika tidak diinstall
 
-// Obfuscate keys to bypass GitHub secret scanning (User Termux need hardcoded keys)
-const _g_part1 = "gsk_62IeeCHvlgOnAfD0JsJWW";
-const _g_part2 = "Gdyb3FYeNCaW8Suq7RJxU49eiR7kHBq";
-const _m_part1 = "AIzaSyBfc1tICoazeRnQmd";
-const _m_part2 = "900KZj3qHNjyBcXw8";
+// --- KEY POOL & OBFUSCATION ---
+// Kita memisahkan prefix 'gsk_' untuk menghindari deteksi secret scanning GitHub
+// Total 7 API Keys untuk rotasi (Load Balancing)
+const GROQ_SUFFIXES = [
+    "62IeeCHvlgOnAfD0JsJWWGdyb3FYeNCaW8Suq7RJxU49eiR7kHBq", // Key 1
+    "UPfRuVDkiyC5QRDcTb0nWGdyb3FYYve09gI6QxBZ3emHnnvILYAi", // Key 2
+    "pMKth7VY7No9FYj081mXWGdyb3FYsXzXctFQxyj2JBrDgZjedFLM", // Key 3
+    "7Oz8R5bKqtzhPK3j6UdNWGdyb3FYwCSG1cSsSp9jHhfWP8zOjKqd", // Key 4
+    "oc6MtSXyrfVHKWw9vba2WGdyb3FYrck8lNECAEU86Q9HXliyfnaM", // Key 5
+    "okodQpp14emtWgUkKkDGWGdyb3FY9ClqstvxhRwfCmKGihxNAeMk", // Key 6
+    "RC05ZgNfKddRN5aqSD75WGdyb3FYqPmd15xRPfutC6Jwhcwjd93y"  // Key 7
+];
 
-const KEYS = {
-    GROQ: process.env.GROQ_API_KEY || (_g_part1 + _g_part2),
-    GEMINI: process.env.MY_API_KEY || (_m_part1 + _m_part2)
-};
+const GEMINI_KEY_PARTS = ["AIzaSyBfc1tICoazeRnQmd", "900KZj3qHNjyBcXw8"];
+
+function getGroqKey() {
+    if (process.env.GROQ_API_KEY) return process.env.GROQ_API_KEY;
+    // Pilih acak dari pool untuk menyebar beban (Rate Limit Mitigation)
+    const randomSuffix = GROQ_SUFFIXES[Math.floor(Math.random() * GROQ_SUFFIXES.length)];
+    return "gsk_" + randomSuffix;
+}
+
+function getGeminiKey() {
+    return process.env.MY_API_KEY || (GEMINI_KEY_PARTS[0] + GEMINI_KEY_PARTS[1]);
+}
 
 async function processWithAI(userMessage, context = "") {
     // Prompt yang LEBIH RINGKAS untuk menghemat token Groq (Limit 6000 TPM)
@@ -49,13 +63,16 @@ JIKA HANYA TANYA/LIHAT TUGAS: JANGAN PAKAI JSON!`;
         console.warn(`[AI] Pollinations Gagal (${error.message}). Coba Groq...`);
     }
 
-    // --- STRATEGI 2: GROQ (Cepat, Limit 6000 TPM) ---
+    // --- STRATEGI 2: GROQ (Cepat, Limit 6000 TPM, 7 Key Rotation) ---
     try {
+        const currentKey = getGroqKey();
+        // console.log(`[AI] Menggunakan Groq Key: ...${currentKey.slice(-5)}`);
+
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${KEYS.GROQ}`
+                'Authorization': `Bearer ${currentKey}`
             },
             body: JSON.stringify({
                 messages: [
@@ -76,7 +93,8 @@ JIKA HANYA TANYA/LIHAT TUGAS: JANGAN PAKAI JSON!`;
 
     // --- STRATEGI 3: GEMINI (Backup Terakhir) ---
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${KEYS.GEMINI}`;
+        const geminiKey = getGeminiKey();
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

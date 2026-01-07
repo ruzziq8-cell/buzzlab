@@ -4,68 +4,60 @@
 async function processWithAI(userMessage, context = "") {
     // === SOLUSI PAMUNGKAS: POLLINATIONS.AI ===
     // KELEBIHAN: GRATIS & TIDAK BUTUH API KEY SAMA SEKALI!
-    
-    const url = "https://text.pollinations.ai/";
-
-    // Format prompt sederhana
-    const systemPrompt = `Kamu adalah asisten AI untuk "BuzzLab", aplikasi To-Do List.
-Jawablah dengan santai, sopan, dan singkat dalam Bahasa Indonesia.
-Jangan terlalu formal. Gunakan emoji sesekali.`;
-
-    const fullPrompt = `${systemPrompt}\n\nCONTEXT: ${context}\n\nUSER: ${userMessage}`;
-
-    // Cek apakah fetch tersedia (Node 18+)
-    if (typeof fetch === 'undefined') {
-        console.error("[AI SERVICE] ❌ Global 'fetch' not found! Node.js version might be too old (need 18+).");
-        return "Maaf, sistem AI sedang error (Node.js version issue).";
-    }
-
     try {
-        console.log(`[AI SERVICE] Mengirim request ke Pollinations (No-Key)...`);
+        const url = "https://text.pollinations.ai/";
         
-        // Pollinations menerima text body langsung atau JSON
+        const systemPrompt = `Kamu adalah asisten AI untuk "BuzzLab", aplikasi To-Do List yang terintegrasi WhatsApp.
+        
+        TUGAS UTAMA: Membantu user mengelola tugas (CRUD).
+        
+        ATURAN PENTING (ACTION MODE):
+        Jika user meminta menambah, mengubah, atau menghapus tugas, JANGAN HANYA MENJAWAB DENGAN TEKS!
+        Kamu WAJIB menyertakan blok JSON khusus di AKHIR jawabanmu agar sistem bisa memprosesnya.
+        
+        FORMAT JSON ACTION:
+        \`\`\`json
+        {
+            "action": "create_task" | "update_task" | "delete_task",
+            "data": {
+                "title": "Judul tugas",
+                "priority": "low" | "medium" | "high",
+                "due_date": "YYYY-MM-DD" (jika ada, default null),
+                "reminder": "60" (menit, jika ada)
+            }
+        }
+        \`\`\`
+
+        CONTOH RESPON BENAR:
+        "Siap, saya akan tambahkan tugas meeting dengan Pak Luki."
+        \`\`\`json
+        { "action": "create_task", "data": { "title": "Meeting dengan Pak Luki", "priority": "high", "due_date": "2026-01-08", "reminder": "60" } }
+        \`\`\`
+        
+        Jawablah dengan santai, sopan, dan singkat dalam Bahasa Indonesia.`;
+
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 messages: [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: `CONTEXT: ${context}\n\nUSER: ${userMessage}` }
+                    { role: 'user', content: `CONTEXT:\n${context}\n\nUSER: ${userMessage}` }
                 ],
-                model: 'openai', // Menggunakan proxy OpenAI gratis mereka
-                seed: 42
+                model: 'openai', // Model gratis terbaik di Pollinations
+                seed: 42,
+                jsonMode: false // Kita parsing manual saja biar aman
             })
         });
 
-        if (!response.ok) {
-            console.error(`[AI SERVICE] Error Pollinations: ${response.status}`);
-            return { text: "Maaf, server AI sedang sibuk. Coba lagi nanti." };
-        }
-
-        // Pollinations langsung mengembalikan teks jawaban (bukan JSON kompleks)
+        if (!response.ok) throw new Error(`Pollinations Error: ${response.status}`);
+        
         const text = await response.text();
-        
-        if (!text) {
-             return { text: "Maaf, AI tidak menjawab." };
-        }
-
-        console.log(`[AI SERVICE] Sukses!`);
-        
-        // Cek JSON Action
-        try {
-            const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
-                return JSON.parse(cleanText);
-            }
-        } catch (e) {}
-
         return { text: text };
 
     } catch (error) {
-        console.error(`[AI SERVICE] Network Error:`, error.message);
-        return { text: "Maaf, koneksi internet bot sedang bermasalah." };
+        console.error("AI Service Error:", error);
+        return { text: "Maaf, otak saya sedang offline sebentar. Coba lagi nanti ya! 🤖💤" };
     }
 }
 

@@ -651,60 +651,44 @@ client.on('message_create', async msg => {
             Jawab dengan ramah dan bantu mereka login.`;
         }
 
-        // Tampilkan indikator mengetik...
-        const chat = await msg.getChat();
-        
-        // Cek kemampuan chat sebelum memanggil fungsi typing
-        // Di versi wwebjs terbaru atau di grup tertentu, fungsi ini kadang tidak tersedia
-        try {
-            if (typeof chat.sendStateTyping === 'function') {
-                await chat.sendStateTyping();
-            }
-        } catch (e) {
-            // Ignore typing error
-        }
-
-        // Proses ke AI
+        // Proses dengan AI
+        await client.sendMessage(sender, "⏳");
         const aiResponse = await processWithAI(text, taskContext);
+        
+        // Cek apakah ada JSON Action di dalam respon AI
+        const jsonMatch = aiResponse.text.match(/```json\s*([\s\S]*?)\s*```/);
+        let finalReply = aiResponse.text;
 
-        // Stop typing
-        try {
-            if (typeof chat.clearStateTyping === 'function') {
-                await chat.clearStateTyping();
+        if (jsonMatch) {
+            try {
+                const actionData = JSON.parse(jsonMatch[1]);
+                const cleanReply = aiResponse.text.replace(jsonMatch[0], '').trim();
+                
+                if (actionData.action === 'create_task' && userProfile) {
+                    const { title, priority, due_date } = actionData.data;
+                    
+                    // Eksekusi ke Database Supabase
+                    const { error } = await authSupabase.from('tasks').insert([{
+                        user_id: userProfile.id,
+                        title: title || 'Tugas Baru',
+                        priority: priority || 'medium',
+                        due_date: due_date || null,
+                        status: 'active'
+                    }]);
+
+                    if (!error) {
+                        finalReply = `${cleanReply}\n\n✅ *Sukses!* Tugas "${title}" berhasil disimpan ke database.`;
+                    } else {
+                        finalReply = `${cleanReply}\n\n❌ *Gagal menyimpan:* ${error.message}`;
+                    }
+                }
+            } catch (e) {
+                console.error("Gagal parsing JSON Action:", e);
             }
-        } catch (e) {
-            // Ignore clear typing error
         }
 
-        if (aiResponse.action === 'add_task') {
-            if (!userProfile) {
-                msg.reply('🤖 Maaf, nomor Anda belum terdaftar. Hubungi admin untuk registrasi.');
-                return;
-            }
-            
-            const taskData = aiResponse.data;
-            const newTask = {
-                user_id: userProfile.id,
-                title: taskData.title,
-                priority: taskData.priority || 'medium',
-                due_date: taskData.due_date || null,
-                reminder_interval: taskData.reminder_interval || 0,
-                status: 'active',
-                created_at: new Date().toISOString()
-            };
-
-            const { error } = await authSupabase.from('tasks').insert([newTask]);
-            
-            if (error) {
-                console.error('Add Task Error:', error);
-                msg.reply('🤖 Gagal menambahkan tugas. Coba lagi nanti.');
-            } else {
-                msg.reply(`🤖 Siap! Tugas *"${taskData.title}"* berhasil ditambahkan.`);
-            }
-
-        } else if (aiResponse.text) {
-            msg.reply(`🤖 ${aiResponse.text}`);
-        }
+        // Kirim balasan final (Teks AI + Status Aksi)
+        await client.sendMessage(sender, finalReply);
     }
 });
 

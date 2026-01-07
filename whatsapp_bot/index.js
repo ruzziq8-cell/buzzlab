@@ -4,6 +4,8 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const http = require('http');
 
+console.log('Bot Version: 2.1 (No Buttons - Text Only Mode)');
+
 // Setup Puppeteer for Termux/Linux vs Windows
 let puppeteerConfig = {
     headless: true,

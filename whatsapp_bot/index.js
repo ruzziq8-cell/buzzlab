@@ -741,32 +741,27 @@ client.on('message_create', async msg => {
                     let fixedDueDate = due_date ? due_date.trim() : null;
                     console.log('[DEBUG AI] Create Task Raw DueDate:', fixedDueDate);
 
-                    // FALLBACK: Jika AI lupa jam (hanya tanggal) ATAU jam 00:00, cari manual di teks user
-                    // Regex: Match YYYY-MM-DD (opsional jam 00:00:00)
-                    const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
-                    const zeroTimeRegex = /^\d{4}-\d{2}-\d{2}[ T]00:00(:00)?$/;
-
-                    if (fixedDueDate && (dateOnlyRegex.test(fixedDueDate) || zeroTimeRegex.test(fixedDueDate))) {
-                         // Extract YYYY-MM-DD base
-                         const dateBase = fixedDueDate.substring(0, 10);
-                         
-                         // Cari jam di teks user (format: HH:MM, H:MM, HH.MM)
-                         // Prioritas: "jam 20:00" -> "pukul 20:00" -> "20:00"
-                         const timeMatch = text.match(/(?:jam|pukul)\s*(\d{1,2}[:.]\d{2})/i) || text.match(/\b(\d{1,2}[:.]\d{2})\b/);
-                         
-                         if (timeMatch) {
-                             let timeStr = timeMatch[1].replace('.', ':');
-                             const [h, m] = timeStr.split(':');
-                             // Normalisasi 9:00 -> 09:00
-                             const hStr = h.length === 1 ? '0' + h : h;
-                             timeStr = `${hStr}:${m}`;
-                             
-                             fixedDueDate = `${dateBase} ${timeStr}`;
-                             console.log('[DEBUG FALLBACK] Manual time injection:', fixedDueDate);
-                         }
+                    // FALLBACK AGRESIF: Selalu cari jam di teks user untuk menimpa/melengkapi jam AI
+                    if (fixedDueDate && fixedDueDate.length >= 10) {
+                        const dateBase = fixedDueDate.substring(0, 10); // Ambil YYYY-MM-DD
+                        
+                        // Cari jam di teks user (format: HH:MM, H:MM, HH.MM)
+                        // Support: "jam 19:40", "pukul 19.40", "pkl 19:40", atau "19:40"
+                        const timeMatch = text.match(/(?:jam|pukul|pkl)\s*(\d{1,2}[:.]\d{2})/i) || text.match(/\b(\d{1,2}[:.]\d{2})\b/);
+                        
+                        if (timeMatch) {
+                            let timeStr = timeMatch[1].replace('.', ':');
+                            const [h, m] = timeStr.split(':');
+                            const hStr = h.length === 1 ? '0' + h : h;
+                            timeStr = `${hStr}:${m}`;
+                            
+                            // FORCE OVERRIDE JAM
+                            fixedDueDate = `${dateBase} ${timeStr}`;
+                            console.log('[DEBUG FALLBACK] Force time injection:', fixedDueDate);
+                        }
                     }
 
-                    if (fixedDueDate && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(fixedDueDate)) {
+                    if (fixedDueDate && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?/.test(fixedDueDate)) {
                         let isoBase = fixedDueDate.replace(' ', 'T');
                         if (isoBase.length === 16) isoBase += ':00';
                         fixedDueDate = isoBase + '+07:00';
@@ -811,13 +806,10 @@ client.on('message_create', async msg => {
                             let fixedDueDate = due_date ? due_date.trim() : null;
                             console.log('[DEBUG AI] Update Task Raw DueDate:', fixedDueDate);
 
-                            // FALLBACK: Jika AI lupa jam (hanya tanggal) ATAU jam 00:00
-                            const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
-                            const zeroTimeRegex = /^\d{4}-\d{2}-\d{2}[ T]00:00(:00)?$/;
-
-                            if (fixedDueDate && (dateOnlyRegex.test(fixedDueDate) || zeroTimeRegex.test(fixedDueDate))) {
+                            // FALLBACK AGRESIF: Selalu cari jam di teks user
+                            if (fixedDueDate && fixedDueDate.length >= 10) {
                                 const dateBase = fixedDueDate.substring(0, 10);
-                                const timeMatch = text.match(/(?:jam|pukul)\s*(\d{1,2}[:.]\d{2})/i) || text.match(/\b(\d{1,2}[:.]\d{2})\b/);
+                                const timeMatch = text.match(/(?:jam|pukul|pkl)\s*(\d{1,2}[:.]\d{2})/i) || text.match(/\b(\d{1,2}[:.]\d{2})\b/);
                                 
                                 if (timeMatch) {
                                     let timeStr = timeMatch[1].replace('.', ':');
@@ -826,11 +818,11 @@ client.on('message_create', async msg => {
                                     timeStr = `${hStr}:${m}`;
                                     
                                     fixedDueDate = `${dateBase} ${timeStr}`;
-                                    console.log('[DEBUG FALLBACK] Manual time injection:', fixedDueDate);
+                                    console.log('[DEBUG FALLBACK] Force time injection:', fixedDueDate);
                                 }
                             }
 
-                            if (fixedDueDate && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(fixedDueDate)) {
+                            if (fixedDueDate && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?/.test(fixedDueDate)) {
                                 let isoBase = fixedDueDate.replace(' ', 'T');
                                 if (isoBase.length === 16) isoBase += ':00';
                                 fixedDueDate = isoBase + '+07:00';

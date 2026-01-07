@@ -1,4 +1,4 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, Buttons } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
@@ -138,21 +138,47 @@ const checkReminders = async () => {
 
                 console.log(`Sending reminder to ${phoneNumber} for "${task.title}"`);
                 
-                // Format pesan
-                const msg = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nJangan lupa dikerjakan ya! Ketik !done ${task.title} jika sudah selesai.`;
+                // Siapkan Pesan Teks Biasa (Fallback)
+                const msgText = `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}\n\nKetik !done ${task.title} jika sudah selesai.`;
+
+                // Siapkan Tombol Interaktif
+                // Potong judul jika terlalu panjang agar muat di tombol
+                let safeTitle = task.title;
+                if (safeTitle.length > 15) safeTitle = safeTitle.substring(0, 15) + '...';
+                
+                // Buat unique identifier di text tombol agar kita bisa melacak tugasnya
+                const btnDone = `✅ Selesai: ${safeTitle}`;
+                const btnSnooze = `⏰ Tunda 15m: ${safeTitle}`;
+
+                const buttons = new Buttons(
+                    `🔔 *REMINDER TUGAS* 🔔\n\nJudul: *${task.title}*\nPrioritas: ${task.priority}\nTenggat: ${task.due_date || '-'}`,
+                    [
+                        { body: btnDone },
+                        { body: btnSnooze }
+                    ],
+                    'BuzzLab Reminder', // Title
+                    'Pilih aksi di bawah:' // Footer
+                );
 
                 try {
-                    await client.sendMessage(phoneNumber, msg);
-                    
-                    // Update last_reminded_at via RPC
-                    await authSupabase.rpc('update_last_reminded', {
-                        task_id: task.id,
-                        new_time: now.toISOString()
-                    });
-
+                    // Coba kirim tombol dulu
+                    await client.sendMessage(phoneNumber, buttons);
+                    console.log('Button sent successfully');
                 } catch (e) {
-                    console.error(`❌ Failed to send reminder to ${phoneNumber}:`, e);
+                    console.error(`❌ Failed to send button, falling back to text:`, e.message);
+                    // Fallback ke text biasa jika tombol gagal (sering terjadi di Multi-Device)
+                    try {
+                        await client.sendMessage(phoneNumber, msgText);
+                    } catch (errText) {
+                        console.error('Failed to send fallback text:', errText);
+                    }
                 }
+                    
+                // Update last_reminded_at via RPC
+                await authSupabase.rpc('update_last_reminded', {
+                    task_id: task.id,
+                    new_time: now.toISOString()
+                });
             }
     }
 };
@@ -187,6 +213,77 @@ client.on('message_create', async msg => {
     const text = msg.body.trim();
 
     // Command Handling
+    // HANDLER RESPON TOMBOL
+    if (text.startsWith('✅ Selesai: ') || text.startsWith('⏰ Tunda 15m: ')) {
+        const isDone = text.startsWith('✅ Selesai: ');
+        const titleFragment = text.split(': ')[1].replace('...', '').trim();
+        
+        // Cari session login untuk user ini
+        let session = sessions.get(sender);
+        
+        // Jika tidak ada session, kita perlu login-kan secara otomatis atau pakai RPC admin (authSupabase)
+        // Kita pakai authSupabase (admin) agar user tidak perlu login manual untuk klik tombol
+        
+        // Cari task berdasarkan judul (partial match) dan nomor WA
+        const senderNumber = sender.replace('@c.us', '');
+        const formattedNumber = senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`;
+
+        // Kita cari task yang aktif milik user ini dengan judul mirip
+        const { data: tasks, error } = await authSupabase
+            .from('tasks')
+            .select('*')
+            .eq('whatsapp_number', formattedNumber)
+            .eq('status', 'active')
+            .ilike('title', `${titleFragment}%`)
+            .limit(1);
+
+        if (error || !tasks || tasks.length === 0) {
+            msg.reply(`⚠️ Maaf, tidak dapat menemukan tugas dengan judul "${titleFragment}". Mungkin sudah selesai atau judul terpotong.`);
+            return;
+        }
+
+        const task = tasks[0];
+
+        if (isDone) {
+            // Update status selesai
+            const completedAt = new Date().toISOString();
+            const { error: updateError } = await authSupabase
+                .from('tasks')
+                .update({ status: 'completed', completed_at: completedAt })
+                .eq('id', task.id);
+
+            if (updateError) {
+                msg.reply('❌ Gagal update status tugas.');
+            } else {
+                msg.reply(`✅ Mantap! Tugas *"${task.title}"* telah ditandai selesai.`);
+            }
+        } else {
+            // Logic Tunda 15 Menit
+            // Kita manipulasi last_reminded_at agar trigger lagi dalam 15 menit
+            // Rumus: LastReminded = Sekarang - (IntervalAsli_ms) + (15menit_ms)
+            // Sehingga: (Sekarang - LastReminded) = IntervalAsli - 15menit
+            // Sisa waktu = 15 menit.
+            
+            const intervalMs = (task.reminder_interval || 60) * 60 * 1000; // Default 60m jika null
+            const snoozeMs = 15 * 60 * 1000;
+            
+            // Pastikan tidak error jika interval < 15 menit
+            const newLastRemindedTime = new Date(Date.now() - intervalMs + snoozeMs);
+
+            const { error: updateError } = await authSupabase
+                .from('tasks')
+                .update({ last_reminded_at: newLastRemindedTime.toISOString() })
+                .eq('id', task.id);
+
+            if (updateError) {
+                msg.reply('❌ Gagal menunda tugas.');
+            } else {
+                msg.reply(`⏰ Oke, saya ingatkan lagi soal *"${task.title}"* dalam 15 menit.`);
+            }
+        }
+        return; // Stop processing other commands
+    }
+
     if (text.startsWith('!trigger')) {
         msg.reply('Memicu pengecekan reminder manual...');
         await checkReminders();

@@ -1,7 +1,7 @@
 // Gunakan native fetch (Node 18+)
 // const fetch = require('node-fetch'); // HAPUS INI karena menyebabkan error MODULE_NOT_FOUND jika tidak diinstall
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 async function processWithAI(userMessage, context = "") {
     const systemPrompt = `Kamu adalah asisten AI untuk "BuzzLab", aplikasi To-Do List yang terintegrasi WhatsApp.
@@ -33,8 +33,6 @@ async function processWithAI(userMessage, context = "") {
     
     Jawablah dengan santai, sopan, dan singkat dalam Bahasa Indonesia.`;
 
-    const fullPrompt = `${systemPrompt}\n\nCONTEXT:\n${context}\n\nUSER: ${userMessage}`;
-
     // --- STRATEGI 1: POLLINATIONS.AI (Gratis) ---
     try {
         // console.log("[AI] Mencoba Pollinations...");
@@ -58,35 +56,40 @@ async function processWithAI(userMessage, context = "") {
         return { text: text };
 
     } catch (error) {
-        console.warn(`[AI] Pollinations Gagal (${error.message}). Mengalihkan ke Gemini...`);
+        console.warn(`[AI] Pollinations Gagal (${error.message}). Mengalihkan ke Groq...`);
     }
 
-    // --- STRATEGI 2: GOOGLE GEMINI (Backup via API Key) ---
+    // --- STRATEGI 2: GROQ (Backup via API Key) ---
     try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-        
-        const response = await fetch(geminiUrl, {
+        if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY belum disetting di Environment Variable!");
+
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${GROQ_API_KEY}`
+            },
             body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: fullPrompt }]
-                }]
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `CONTEXT:\n${context}\n\nUSER: ${userMessage}` }
+                ],
+                model: "llama3-8b-8192"
             })
         });
 
         if (!response.ok) {
             const errText = await response.text();
-            throw new Error(`Gemini Error ${response.status}: ${errText}`);
+            throw new Error(`Groq Error ${response.status}: ${errText}`);
         }
 
         const data = await response.json();
-        const text = data.candidates[0].content.parts[0].text;
+        const text = data.choices[0].message.content;
         return { text: text };
 
-    } catch (geminiError) {
-        console.error("[AI] Gemini juga gagal:", geminiError);
-        return { text: "Maaf, semua server AI (Pollinations & Gemini) sedang sibuk/error. Coba lagi nanti ya! 🤖💤" };
+    } catch (groqError) {
+        console.error("[AI] Groq juga gagal:", groqError);
+        return { text: "Maaf, semua server AI (Pollinations & Groq) sedang sibuk/error. Coba lagi nanti ya! 🤖💤" };
     }
 }
 

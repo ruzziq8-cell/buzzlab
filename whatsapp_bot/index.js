@@ -156,6 +156,7 @@ const checkReminders = async () => {
                 // Kita gunakan formattedNumber yang konsisten
                 let taskNumber = '?';
                 try {
+                    console.log(`Debug: Fetching rank for number '${task.whatsapp_number}'`);
                     const { data: userTasks, error: rankError } = await authSupabase
                         .from('tasks')
                         .select('id')
@@ -163,9 +164,16 @@ const checkReminders = async () => {
                         .eq('status', 'active')
                         .order('created_at', { ascending: false });
     
+                    if (rankError) {
+                        console.error('Debug: Rank query error:', rankError.message);
+                    } else {
+                        console.log(`Debug: Found ${userTasks?.length} tasks for this user.`);
+                    }
+
                     if (!rankError && userTasks) {
                         const taskIndex = userTasks.findIndex(t => t.id === task.id);
                         taskNumber = taskIndex !== -1 ? taskIndex + 1 : '?';
+                        console.log(`Debug: Task ID ${task.id} is at index ${taskIndex} (Number ${taskNumber})`);
                     }
                 } catch (err) {
                     console.error('Error calculating task number:', err.message);
@@ -248,15 +256,37 @@ client.on('message_create', async msg => {
         
         // Cari task berdasarkan nomor urut (tanpa perlu session login bot)
         const senderNumber = sender.replace('@c.us', '');
-        const formattedNumber = senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`;
+        
+        // Coba variasi format nomor (dengan + dan tanpa +)
+        const formats = [
+            senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`, // Format +62
+            senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber // Format 62
+        ];
 
-        // Ambil semua tugas aktif user ini, urutkan berdasarkan waktu buat (konsisten dengan !list dan reminder)
-        const { data: tasks, error } = await authSupabase
+        let tasks = [];
+        let error = null;
+
+        // Coba fetch dengan format pertama
+        const res1 = await authSupabase
             .from('tasks')
             .select('*')
-            .eq('whatsapp_number', formattedNumber)
+            .eq('whatsapp_number', formats[0])
             .eq('status', 'active')
-            .order('created_at', { ascending: false }); // Urutan harus sama dengan saat reminder dibuat
+            .order('created_at', { ascending: false });
+        
+        if (res1.data && res1.data.length > 0) {
+            tasks = res1.data;
+        } else {
+            // Jika kosong, coba format kedua
+            const res2 = await authSupabase
+                .from('tasks')
+                .select('*')
+                .eq('whatsapp_number', formats[1])
+                .eq('status', 'active')
+                .order('created_at', { ascending: false });
+            tasks = res2.data;
+            error = res2.error;
+        }
 
         if (error || !tasks || tasks.length === 0) {
             msg.reply('⚠️ Tidak ada tugas aktif yang ditemukan.');

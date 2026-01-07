@@ -13,23 +13,24 @@ async function listModels() {
     const genAI = new GoogleGenerativeAI(apiKey);
     
     try {
-        // Coba model gemini-1.5-flash langsung dulu
-        console.log("\n[TEST 1] Mencoba akses model 'gemini-1.5-flash'...");
+        console.log("\n[DIAGNOSTIC] Mengambil daftar model yang tersedia untuk API Key ini...");
+        // Gunakan listModels() bawaan library untuk melihat apa yang diizinkan
+        // Note: Library versi lama mungkin tidak punya method ini di root, kita coba via getGenerativeModel
+        
+        // Coba manual fetch jika library belum support listModels
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const result = await model.generateContent("Tes halo");
-        console.log("✅ BERHASIL! Respons:", result.response.text());
+        console.log("Model object created. Testing generation...");
+        
+        const result = await model.generateContent("Tes koneksi. Balas 'OK' jika masuk.");
+        console.log("✅ KONEKSI BERHASIL! Respons:", result.response.text());
+        
     } catch (error) {
-        console.error("❌ GAGAL Test 1:", error.message);
-    }
-
-    try {
-        // Coba model gemini-pro (versi lama tapi stabil)
-        console.log("\n[TEST 2] Mencoba akses model 'gemini-pro'...");
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-        const result = await model.generateContent("Tes halo");
-        console.log("✅ BERHASIL! Respons:", result.response.text());
-    } catch (error) {
-        console.error("❌ GAGAL Test 2:", error.message);
+        console.error("❌ DIAGNOSA GAGAL:", error.message);
+        console.log("\n--- KEMUNGKINAN PENYEBAB ---");
+        console.log("1. API Key salah / typo (Cek spasi di awal/akhir)");
+        console.log("2. API Key belum diaktifkan di Google AI Studio");
+        console.log("3. Kuota habis / Billing bermasalah");
+        console.log("4. IP Address Termux diblokir Google (Jarang terjadi)");
     }
 }
 

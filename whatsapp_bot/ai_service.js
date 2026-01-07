@@ -1,7 +1,15 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Inisialisasi Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// DEBUG: Cek apakah API Key terbaca
+const apiKey = process.env.GEMINI_API_KEY;
+if (apiKey) {
+    console.log(`[AI SERVICE] API Key loaded: ${apiKey.substring(0, 5)}...${apiKey.substring(apiKey.length - 4)}`);
+} else {
+    console.error("[AI SERVICE] ❌ API KEY MISSING IN ENV!");
+}
+
+const genAI = new GoogleGenerativeAI(apiKey);
 
 async function processWithAI(userMessage, context = "") {
     try {

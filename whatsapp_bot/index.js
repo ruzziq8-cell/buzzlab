@@ -789,7 +789,16 @@ client.on('message_create', async msg => {
                     }]);
 
                     if (!error) {
-                        finalReply = `✅ *Sukses!* Tugas "${title}" berhasil disimpan`;
+                        let dateInfo = '';
+                        if (fixedDueDate) {
+                            try {
+                                dateInfo = ' 📅 ' + new Date(fixedDueDate).toLocaleString('id-ID', { 
+                                    timeZone: 'Asia/Jakarta',
+                                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
+                                }).replace('.', ':');
+                            } catch (e) {}
+                        }
+                        finalReply = `✅ *Sukses!* Tugas "${title}" berhasil disimpan${dateInfo}`;
                         if (reminder_interval) finalReply += ` (Reminder: ${reminder_interval}m)`;
                     } else {
                         finalReply = `❌ Gagal: ${error.message}`;
@@ -860,6 +869,16 @@ client.on('message_create', async msg => {
                     if (successCount === 0) console.log("Available Tasks Context:", tasks.map((t,i) => `${i+1}:${t.title}`).join(', '));
                     
                     finalReply = successCount > 0 ? `✅ ${successCount} tugas berhasil diupdate.` : `⚠️ Gagal update. Cek nomor tugas (!list).`;
+                    // Tambahkan info tanggal baru jika ada update tanggal
+                    if (successCount > 0 && actionData.data.due_date) {
+                         try {
+                             const newDateStr = new Date(actionData.data.due_date).toLocaleString('id-ID', { 
+                                 timeZone: 'Asia/Jakarta',
+                                 day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
+                             }).replace('.', ':');
+                             finalReply += `\nTenggat baru: ${newDateStr}`;
+                         } catch (e) {}
+                    }
                 }
 
                 else if (actionData.action === 'delete_task' && userProfile) {

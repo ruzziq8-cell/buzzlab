@@ -745,6 +745,9 @@ client.on('message_create', async msg => {
                         const { error } = await authSupabase.from('tasks').update(updates).eq('id', realTask.id);
                         if (!error) successCount++;
                     }
+                    console.log(`[DEBUG AI ACTION] Update Task: TargetIds=${JSON.stringify(targetIds)}, Success=${successCount}`);
+                    if (successCount === 0) console.log("Available Tasks Context:", tasks.map((t,i) => `${i+1}:${t.title}`).join(', '));
+                    
                     finalReply = successCount > 0 ? `✅ ${successCount} tugas berhasil diupdate.` : `⚠️ Gagal update. Cek nomor tugas (!list).`;
                 }
 

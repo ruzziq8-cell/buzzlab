@@ -57,9 +57,9 @@ AI: \`\`\`json
 \`\`\`
 
 User: "done ketemu pak jokowi"
-(Asumsi: Ada tugas ID 5 berjudul "Ketemu Pak Jokowi")
+(Asumsi: Di daftar tugas, "Ketemu Pak Jokowi" ada di nomor urut 1)
 AI: \`\`\`json
-{"action":"update_task","data":{"id":[5],"status":"completed"}}
+{"action":"update_task","data":{"id":[1],"status":"completed"}}
 \`\`\`
 
 User: "Ingatkan rapat besok jam 9"
@@ -74,7 +74,7 @@ AI: \`\`\`json
 
 ATURAN UTAMA:
 1. KALAU USER MINTA UPDATE/CREATE/DELETE -> WAJIB OUTPUT JSON. JANGAN CUMA NGOMONG "SIAP" ATAU "DONE".
-2. Kalau user sebut nama tugas (bukan ID), cari ID yang paling mirip di context, lalu pake ID itu di JSON.
+2. 'id' di JSON harus sesuai dengan NOMOR URUT di daftar tugas yang kamu lihat di context (1, 2, 3...), BUKAN ID acak.
 3. KALAU CUMA NGOBROL -> JANGAN PAKE JSON. Jawab yang asik dan frontal!`;
 
     // Masukkan Context ke System Prompt agar lebih kuat

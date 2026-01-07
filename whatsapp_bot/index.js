@@ -552,9 +552,6 @@ client.on('message_create', async msg => {
                 let reply = '*Daftar Tugas Anda:*\n\n';
                 tasks.forEach((t, i) => {
                     let dStr = '';
-                    // DEBUG: Cek raw date dari database
-                    console.log(`[DEBUG LIST] Task ${i+1} Raw DueDate:`, t.due_date);
-                    
                     if (t.due_date) {
                         try {
                             dStr = ' [📅 ' + new Date(t.due_date).toLocaleString('id-ID', { 
@@ -744,7 +741,7 @@ client.on('message_create', async msg => {
                     
                     // Fix Timezone: Asumsikan input AI "YYYY-MM-DD HH:mm" adalah WIB (UTC+7)
                     let fixedDueDate = due_date ? due_date.trim() : null;
-                    console.log('[DEBUG AI] Create Task Raw DueDate:', fixedDueDate);
+                    // console.log('[DEBUG AI] Create Task Raw DueDate:', fixedDueDate);
 
                     // FALLBACK AGRESIF: Selalu cari jam di teks user untuk menimpa/melengkapi jam AI
                             // Jika AI mengembalikan tanggal valid (minimal ada YYYY-MM-DD)
@@ -757,10 +754,6 @@ client.on('message_create', async msg => {
                                 // Support: "jam 19:40", "pukul 19.40", "pkl 19:40", atau "19:40"
                                 const timeMatch = text.match(/(?:jam|pukul|pkl)\s*(\d{1,2}[:.]\d{2})/i) || text.match(/\b(\d{1,2}[:.]\d{2})\b/);
                                 
-                                console.log('[DEBUG TIME] User Text:', text);
-                                console.log('[DEBUG TIME] AI Date:', fixedDueDate);
-                                console.log('[DEBUG TIME] Regex Match:', timeMatch);
-
                                 if (timeMatch) {
                                     let timeStr = timeMatch[1].replace('.', ':');
                                     const [h, m] = timeStr.split(':');
@@ -771,7 +764,7 @@ client.on('message_create', async msg => {
                                     
                                     // FORCE OVERRIDE JAM
                                     fixedDueDate = `${dateBase} ${timeStr}`;
-                                    console.log('[DEBUG FALLBACK] Force time injection:', fixedDueDate);
+                                    // console.log('[DEBUG FALLBACK] Force time injection:', fixedDueDate);
                                 }
                             }
 
@@ -794,7 +787,7 @@ client.on('message_create', async msg => {
                     if (!error) {
                         // Cek apa yang sebenarnya tersimpan di DB
                         const savedTask = insertedData && insertedData[0];
-                        console.log('[DEBUG SAVE] Saved Task DueDate:', savedTask ? savedTask.due_date : 'No Data');
+                        // console.log('[DEBUG SAVE] Saved Task DueDate:', savedTask ? savedTask.due_date : 'No Data');
 
                         let dateInfo = '';
                         // Gunakan data dari DB jika ada, untuk konfirmasi akurat
@@ -834,7 +827,7 @@ client.on('message_create', async msg => {
                         if (priority) updates.priority = priority;
                         if (due_date) {
                             let fixedDueDate = due_date ? due_date.trim() : null;
-                            console.log('[DEBUG AI] Update Task Raw DueDate:', fixedDueDate);
+                            // console.log('[DEBUG AI] Update Task Raw DueDate:', fixedDueDate);
 
                             // FALLBACK AGRESIF: Selalu cari jam di teks user untuk menimpa/melengkapi jam AI
                             if (fixedDueDate) {
@@ -845,10 +838,6 @@ client.on('message_create', async msg => {
                                 // Cari jam di teks user (format: HH:MM, H:MM, HH.MM)
                                 const timeMatch = text.match(/(?:jam|pukul|pkl)\s*(\d{1,2}[:.]\d{2})/i) || text.match(/\b(\d{1,2}[:.]\d{2})\b/);
                                 
-                                console.log('[DEBUG TIME UPDATE] User Text:', text);
-                                console.log('[DEBUG TIME UPDATE] AI Date:', fixedDueDate);
-                                console.log('[DEBUG TIME UPDATE] Regex Match:', timeMatch);
-
                                 if (timeMatch) {
                                     let timeStr = timeMatch[1].replace('.', ':');
                                     const [h, m] = timeStr.split(':');
@@ -858,7 +847,7 @@ client.on('message_create', async msg => {
                                     
                                     // FORCE OVERRIDE JAM
                                     fixedDueDate = `${dateBase} ${timeStr}`;
-                                    console.log('[DEBUG FALLBACK UPDATE] Force time injection:', fixedDueDate);
+                                    // console.log('[DEBUG FALLBACK UPDATE] Force time injection:', fixedDueDate);
                                 }
                             }
 
@@ -878,7 +867,7 @@ client.on('message_create', async msg => {
                             // Gunakan data aktual dari DB untuk feedback
                             if (updatedData && updatedData[0]) {
                                 actionData.data.due_date = updatedData[0].due_date;
-                                console.log('[DEBUG UPDATE] Saved Task DueDate:', updatedData[0].due_date);
+                                // console.log('[DEBUG UPDATE] Saved Task DueDate:', updatedData[0].due_date);
                             }
                         }
                     }

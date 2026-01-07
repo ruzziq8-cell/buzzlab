@@ -122,11 +122,10 @@ const checkReminders = async () => {
         const lastReminded = task.last_reminded_at ? new Date(task.last_reminded_at) : null;
         let intervalMs;
         
-        if (task.reminder_interval === 1) {
-            intervalMs = 5 * 1000; 
-        } else {
-            intervalMs = task.reminder_interval * 60 * 1000;
-        }
+        // Interval dalam menit (Bebas, sesuai input user)
+        // Default ke 60 menit jika null/0
+        const intervalMinutes = task.reminder_interval && task.reminder_interval > 0 ? task.reminder_interval : 60;
+        intervalMs = intervalMinutes * 60 * 1000;
 
         // LOGIKA WAKTU
             const created = new Date(task.created_at);

@@ -53,6 +53,11 @@ AI: \`\`\`json
 {"action":"create_task","data":{"title":"Rapat","priority":"high","reminder_interval":30}}
 \`\`\`
 
+User: "Ingatkan minum air tiap 15 menit"
+AI: \`\`\`json
+{"action":"create_task","data":{"title":"Minum Air","priority":"medium","reminder_interval":15}}
+\`\`\`
+
 JIKA TANYA/LIHAT: Jawab biasa tanpa JSON.`;
 
     // Masukkan Context ke System Prompt agar lebih kuat

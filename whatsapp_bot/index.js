@@ -706,7 +706,6 @@ client.on('message_create', async msg => {
                 if (actionData.action === 'create_task' && userProfile) {
                     const { title, priority, due_date, reminder_interval } = actionData.data;
                     
-                    // Eksekusi ke Database Supabase
                     const { error } = await authSupabase.from('tasks').insert([{
                         user_id: userProfile.id,
                         title: title || 'Tugas Baru',
@@ -717,12 +716,52 @@ client.on('message_create', async msg => {
                     }]);
 
                     if (!error) {
-                        finalReply += `\n\n✅ *Sukses!* Tugas "${title}" berhasil disimpan`;
-                        if (reminder_interval) finalReply += ` dengan reminder tiap ${reminder_interval} menit.`;
-                        else finalReply += `.`;
+                        finalReply = `✅ *Sukses!* Tugas "${title}" berhasil disimpan`;
+                        if (reminder_interval) finalReply += ` (Reminder: ${reminder_interval}m)`;
                     } else {
-                        finalReply += `\n\n❌ *Gagal menyimpan:* ${error.message}`;
+                        finalReply = `❌ Gagal: ${error.message}`;
                     }
+                }
+
+                else if (actionData.action === 'update_task' && userProfile) {
+                    const { id, title, status, priority, due_date, reminder_interval } = actionData.data;
+                    const targetIds = Array.isArray(id) ? id : [id];
+                    let successCount = 0;
+
+                    for (const targetId of targetIds) {
+                        const taskIndex = parseInt(targetId) - 1;
+                        if (!tasks || !tasks[taskIndex]) continue;
+
+                        const realTask = tasks[taskIndex];
+                        const updates = {};
+                        if (title) updates.title = title;
+                        if (status) {
+                             updates.status = (status === 'selesai' || status === 'completed') ? 'completed' : status;
+                             if (updates.status === 'completed') updates.completed_at = new Date().toISOString();
+                        }
+                        if (priority) updates.priority = priority;
+                        if (due_date) updates.due_date = due_date;
+                        if (reminder_interval) updates.reminder_interval = reminder_interval;
+
+                        const { error } = await authSupabase.from('tasks').update(updates).eq('id', realTask.id);
+                        if (!error) successCount++;
+                    }
+                    finalReply = successCount > 0 ? `✅ ${successCount} tugas berhasil diupdate.` : `⚠️ Gagal update. Cek nomor tugas (!list).`;
+                }
+
+                else if (actionData.action === 'delete_task' && userProfile) {
+                    const { id } = actionData.data;
+                    const targetIds = Array.isArray(id) ? id : [id];
+                    let successCount = 0;
+
+                    for (const targetId of targetIds) {
+                         const taskIndex = parseInt(targetId) - 1;
+                         if (!tasks || !tasks[taskIndex]) continue;
+                         
+                         const { error } = await authSupabase.from('tasks').delete().eq('id', tasks[taskIndex].id);
+                         if (!error) successCount++;
+                    }
+                    finalReply = successCount > 0 ? `🗑️ ${successCount} tugas berhasil dihapus.` : `⚠️ Gagal hapus. Cek nomor tugas (!list).`;
                 }
             } catch (e) {
                 console.error("Gagal parsing JSON Action:", e);

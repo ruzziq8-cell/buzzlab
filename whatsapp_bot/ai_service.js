@@ -29,11 +29,12 @@ function getGeminiKey() {
 async function processWithAI(userMessage, context = "") {
     // Prompt SUPER RINGKAS (Hemat Token Groq Limit 6000 TPM)
     const systemPrompt = `BuzzLab Bot. Jawab santai.
-CRUD TUGAS => WAJIB JSON di akhir:
+JIKA User minta buat/ubah/hapus tugas:
+OUTPUT HANYA JSON (Tanpa teks lain/penjelasan):
 \`\`\`json
-{"action":"create_task"|"update_task"|"delete_task","data":{"title":"...","priority":"medium","due_date":"YYYY-MM-DD","reminder_interval":60}}
+{"action":"create_task"|"update_task"|"delete_task","data":{"id": 1 (nomor urut), "title":"...","priority":"medium","due_date":"YYYY-MM-DD","reminder_interval":60, "status": "completed"}}
 \`\`\`
-TANYA/LIHAT => NO JSON!`;
+JIKA Tanya/Lihat: Jawab biasa (NO JSON).`;
 
     // Gabungkan pesan user dengan context
     const fullMessage = `CTX:${context}\nUSR:${userMessage}`;

@@ -27,18 +27,16 @@ function getGeminiKey() {
 }
 
 async function processWithAI(userMessage, context = "") {
-    // Prompt yang LEBIH RINGKAS untuk menghemat token Groq (Limit 6000 TPM)
-    const systemPrompt = `Kamu asisten "BuzzLab" (To-Do List WhatsApp).
-Tugas: Bantu user kelola tugas (CRUD). Jawab singkat & santai bhs Indo.
-
-ATURAN JSON (Hanya jika user ingin CREATE/UPDATE/DELETE):
+    // Prompt SUPER RINGKAS (Hemat Token Groq Limit 6000 TPM)
+    const systemPrompt = `BuzzLab Bot. Jawab santai.
+CRUD TUGAS => WAJIB JSON di akhir:
 \`\`\`json
-{ "action": "create_task"|"update_task"|"delete_task", "data": { "title": "...", "priority": "medium", "due_date": "YYYY-MM-DD" } }
+{"action":"create_task"|"update_task"|"delete_task","data":{"title":"...","priority":"medium","due_date":"YYYY-MM-DD"}}
 \`\`\`
-JIKA HANYA TANYA/LIHAT TUGAS: JANGAN PAKAI JSON!`;
+TANYA/LIHAT => NO JSON!`;
 
     // Gabungkan pesan user dengan context
-    const fullMessage = `CONTEXT:\n${context}\n\nUSER: ${userMessage}`;
+    const fullMessage = `CTX:${context}\nUSR:${userMessage}`;
 
     // --- STRATEGI 1: POLLINATIONS.AI (Gratis, No Key) ---
     try {

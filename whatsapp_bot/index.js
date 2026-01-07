@@ -642,17 +642,14 @@ client.on('message_create', async msg => {
         let taskContext = "";
         if (userProfile) {
             if (tasks && tasks.length > 0) {
-                taskContext = tasks.map((t, i) => `${i+1}. ${t.title} (Prioritas: ${t.priority}, Tenggat: ${t.due_date || '-'})`).join('\n');
+                // Format ringkas: 1.Judul[P]|Date (Hemat Token)
+                taskContext = tasks.map((t, i) => `${i+1}.${t.title}[${t.priority?t.priority.charAt(0).toUpperCase():'M'}]${t.due_date?`|${t.due_date}`:''}`).join('\n');
             } else {
-                taskContext = "User sudah terhubung, tapi tidak memiliki tugas aktif saat ini.";
+                taskContext = "NO_TASKS";
             }
         } else {
-            // INFO PENTING: Beritahu AI bahwa user belum login, dan minta user untuk login
-            taskContext = `INFO PENTING: User ini BELUM TERHUBUNG ke database BuzzLab. 
-            Nomor WhatsApp mereka tidak ditemukan di sistem.
-            SARANKAN USER UNTUK MENGETIK: !login <email> <password>
-            Agar bot bisa mengenali mereka dan membaca tugas-tugasnya.
-            Jawab dengan ramah dan bantu mereka login.`;
+            // INFO PENTING: Beritahu AI bahwa user belum login
+            taskContext = `USER_NOT_LOGGED_IN. SARANKAN: !login <email> <pass>`;
         }
 
         // Proses dengan AI

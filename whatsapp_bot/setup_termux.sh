@@ -1,66 +1,43 @@
 #!/bin/bash
 
-# Warna
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "${GREEN}=== SETUP BUZZLAB BOT UNTUK TERMUX (FULL AUTO) ===${NC}"
-echo ""
+# API Key Anda (TERBARU)
+MY_API_KEY="AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8"
 
-# 1. Update Repo
-echo -e "${YELLOW}[1/5] Mengupdate repository project...${NC}"
+echo -e "${GREEN}=== SETUP BUZZLAB BOT (AUTO UPDATE KEY) ===${NC}"
+
+# 1. Update Repository
+echo -e "${YELLOW}[1/3] Memastikan kode terbaru...${NC}"
 git pull
 
-# 2. Setup API Key AI
-echo -e "${YELLOW}[2/5] Konfigurasi AI (Google Gemini)...${NC}"
-if [ -f .env ] && grep -q "GEMINI_API_KEY" .env; then
-    echo -e "${GREEN}✅ API Key sudah terdeteksi di .env${NC}"
-else
-    echo "Masukkan Google Gemini API Key Anda (dari aistudio.google.com):"
-    read -p "API Key > " API_KEY
-    
-    if [ ! -z "$API_KEY" ]; then
-        # Simpan ke .env untuk pemakaian lokal
-        echo "GEMINI_API_KEY=$API_KEY" >> .env
-        
-        # Simpan ke bashrc agar permanen di session terminal
-        if ! grep -q "GEMINI_API_KEY" ~/.bashrc; then
-            echo "export GEMINI_API_KEY=\"$API_KEY\"" >> ~/.bashrc
-        fi
-        
-        echo -e "${GREEN}✅ API Key tersimpan.${NC}"
-    else
-        echo -e "${YELLOW}⚠️ API Key dikosongkan. Fitur AI tidak akan jalan.${NC}"
-    fi
+# 2. Setup API Key Otomatis
+echo -e "${YELLOW}[2/3] Menyimpan API Key Baru...${NC}"
+
+# Hapus key lama di .env jika ada
+if grep -q "GEMINI_API_KEY" .env 2>/dev/null; then
+    sed -i '/GEMINI_API_KEY/d' .env
 fi
+# Masukkan key baru
+echo "GEMINI_API_KEY=$MY_API_KEY" >> .env
 
-# 3. Install Chromium
-echo -e "${YELLOW}[3/5] Menginstall Chromium & System Deps...${NC}"
-pkg update -y
-pkg install tur-repo -y
-pkg install x11-repo -y
-pkg update -y
-pkg install chromium -y
+# Hapus key lama di .bashrc jika ada
+sed -i '/GEMINI_API_KEY/d' ~/.bashrc
+# Masukkan key baru
+echo "export GEMINI_API_KEY=\"$MY_API_KEY\"" >> ~/.bashrc
 
-# 4. Install Node Modules
-echo -e "${YELLOW}[4/5] Menginstall dependencies Bot...${NC}"
-export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# Load key sekarang juga
+export GEMINI_API_KEY="$MY_API_KEY"
+
+echo -e "${GREEN}✅ API Key BERHASIL diupdate!${NC}"
+echo "Key: ${MY_API_KEY:0:10}..."
+
+# 3. Dependencies (Optional, buat jaga-jaga)
+echo -e "${YELLOW}[3/3] Cek Dependencies...${NC}"
 npm install
 
-# 5. Setup PM2
-echo -e "${YELLOW}[5/5] Setup Process Manager (PM2)...${NC}"
-npm install -g pm2
-pm2 stop buzzlab 2>/dev/null || true
-pm2 delete buzzlab 2>/dev/null || true
-
-echo ""
-echo -e "${GREEN}=== INSTALASI SELESAI! ===${NC}"
-echo "Cara Menjalankan Bot:"
-echo "1. Ketik perintah ini untuk start:"
-echo -e "   ${GREEN}pm2 start index.js --name buzzlab${NC}"
-echo ""
-echo "2. Scan QR Code yang muncul di layar."
-echo "3. Cek log jika QR tidak muncul: pm2 logs buzzlab"
-echo ""
-echo "Tips: Agar jalan 24 jam nonstop, jalankan juga: bash setup_autostart.sh"
+echo -e "${GREEN}=== SELESAI! ===${NC}"
+echo "Silakan restart bot sekarang:"
+echo "pm2 restart buzzlab"

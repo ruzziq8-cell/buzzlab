@@ -109,6 +109,11 @@ const checkReminders = async () => {
     const { data: reminders, error } = await authSupabase.rpc('get_due_reminders');
 
     if (error) {
+        // Suppress network errors (fetch failed) to avoid log spam
+        if (error.message && error.message.includes('fetch failed')) {
+            // console.warn('Network glitch (checkReminders), retrying later...');
+            return;
+        }
         console.error('RPC Error (checkReminders):', error.message);
         return;
     }
@@ -229,8 +234,8 @@ const checkReminders = async () => {
     }
 };
 
-// Run checkReminders every 10 seconds (less frequent to avoid congestion)
-setInterval(checkReminders, 10 * 1000);
+// Run checkReminders every 30 seconds (less frequent to avoid congestion)
+setInterval(checkReminders, 30 * 1000);
 
 client.on('qr', (qr) => {
     console.log('SCAN QR CODE INI MENGGUNAKAN WHATSAPP ANDA:');

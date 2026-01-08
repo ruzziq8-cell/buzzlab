@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BuzzLab Scheduler</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/theme.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .scheduler-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        .form-row {
+            display: flex;
+            gap: 1rem;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+        .message-list {
+            list-style: none;
+            padding: 0;
+        }
+        .message-item {
+            background: var(--bg-color);
+            border: 1px solid var(--input-border);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .message-info h4 {
+            margin: 0 0 5px 0;
+            font-size: 1rem;
+        }
+        .message-info p {
+            margin: 0;
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+        }
+        .message-meta {
+            font-size: 0.8rem;
+            color: var(--primary-color);
+            margin-top: 5px;
+            font-weight: bold;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin-left: 5px;
+        }
+        .status-pending { background: #f59e0b; color: white; }
+        .status-sent { background: #10b981; color: white; }
+        .status-failed { background: #ef4444; color: white; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>🤖 Auto Message</h1>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <a href="index.html" class="btn-small btn-secondary">← Kembali</a>
+                <button id="theme-toggle" class="btn-icon">🌙</button>
+            </div>
+        </header>
+
+        <main class="scheduler-container">
+            <!-- Form Jadwal -->
+            <div class="card">
+                <h2>📅 Jadwalkan Pesan Baru</h2>
+                <form id="schedule-form">
+                    <div class="form-group">
+                        <label for="phone">Nomor WhatsApp Target</label>
+                        <input type="text" id="phone" placeholder="Contoh: 628123456789" required>
+                        <small style="color: var(--secondary-color);">Gunakan kode negara (62...) tanpa + atau spasi.</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="message">Pesan</label>
+                        <textarea id="message" rows="4" placeholder="Tulis pesanmu di sini..." required></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="date">Tanggal</label>
+                            <input type="date" id="date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="time">Jam</label>
+                            <input type="time" id="time" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" style="width: 100%;">🚀 Simpan Jadwal</button>
+                </form>
+            </div>
+
+            <!-- List Pesan -->
+            <div class="card">
+                <h2>⏳ Antrian Pesan</h2>
+                <div id="loading-list" style="text-align: center; display: none;">Memuat...</div>
+                <ul id="message-list" class="message-list">
+                    <!-- Items injected via JS -->
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/supabase.js"></script>
+    <script src="js/scheduler.js"></script>
+</body>
+</html>

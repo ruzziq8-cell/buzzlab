@@ -5,6 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const http = require('http');
 const { processWithAI } = require('./ai_service');
+const { checkScheduledMessages } = require('./scheduler_service');
 
 console.log('Bot Version: 3.0 (AI Enabled)');
 
@@ -243,7 +244,14 @@ client.on('qr', (qr) => {
 });
 
 client.on('ready', () => {
-    console.log('Client is ready!');
+    console.log('✅ Client is ready!');
+    
+    // Start Scheduler (Check every 60 seconds)
+    console.log('⏰ Starting Scheduler Service...');
+    checkScheduledMessages(client); // Run immediately
+    setInterval(() => {
+        checkScheduledMessages(client);
+    }, 60000);
 });
 
 // Gunakan message_create agar bisa merespon pesan dari diri sendiri (Note to Self)

@@ -16,9 +16,11 @@ pm2 stop buzzlab
 # 2. Hapus file Lock yang membuat error
 # Error: Failed to create .../SingletonLock: File exists
 echo "[+] Membersihkan file yang nyangkut..."
-rm -rf .wwebjs_auth/session-buzzlab_bot_v2/SingletonLock
-rm -rf .wwebjs_auth/session-buzzlab_bot_v2/SingletonCookie
-rm -rf .wwebjs_auth/session-buzzlab_bot_v2/SingletonSocket
+rm -rf .wwebjs_auth/session-buzzlab_bot_v2/Singleton*
+if [ -f ".wwebjs_auth/session-buzzlab_bot_v2/SingletonLock" ]; then
+    echo "⚠️ Gagal menghapus SingletonLock via rm. Mencoba paksa..."
+    unlink .wwebjs_auth/session-buzzlab_bot_v2/SingletonLock
+fi
 
 # 3. Matikan paksa proses Chrome/Chromium yang mungkin masih jalan sembunyi-sembunyi
 echo "[+] Mematikan sisa proses Chrome..."

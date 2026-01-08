@@ -1,29 +1,30 @@
 #!/bin/bash
-# Script Khusus Update API Key
+# Script Setup/Update .env Otomatis (Interactive)
 # Jalankan dengan: bash update_key.sh
 
-NEW_KEY="AIzaSyBfc1tICoazeRnQmd900KZj3qHNjyBcXw8"
+echo "=== SETUP ENV VARS ==="
+echo "Masukkan API Keys Anda. Tekan Enter untuk skip (kosong)."
 
-echo "=== UPDATING API KEY ==="
-echo "Key Baru: $NEW_KEY"
+read -p "Gemini Key 1: " KEY1
+read -p "Gemini Key 2: " KEY2
+read -p "Cohere API Key: " COHERE
+read -p "Hugging Face Token: " HF
 
-# 1. Update .env
-if [ -f .env ]; then
-    # Hapus baris lama
-    grep -v "GEMINI_API_KEY" .env > .env.tmp
-    mv .env.tmp .env
-fi
-echo "GEMINI_API_KEY=$NEW_KEY" >> .env
-echo "✅ Updated .env"
+# Buat file .env
+cat > .env <<EOL
+# AI Keys Configuration
+# Gemini Pool (Load Balancing)
+GEMINI_KEY_1=$KEY1
+GEMINI_KEY_2=$KEY2
 
-# 2. Update .bashrc
-grep -v "GEMINI_API_KEY" ~/.bashrc > ~/.bashrc.tmp
-mv ~/.bashrc.tmp ~/.bashrc
-echo "export GEMINI_API_KEY=\"$NEW_KEY\"" >> ~/.bashrc
-echo "✅ Updated ~/.bashrc"
+# Backup Providers
+COHERE_API_KEY=$COHERE
+HF_TOKEN=$HF
+EOL
 
-# 3. Load langsung ke memory session ini
-export GEMINI_API_KEY="$NEW_KEY"
-
-echo "=== SELESAI ==="
-echo "Sekarang jalankan: pm2 restart buzzlab"
+echo ""
+echo "✅ File .env berhasil dibuat/diupdate!"
+echo "Isi .env:"
+cat .env
+echo ""
+echo "JANGAN LUPA: Restart bot dengan 'pm2 restart buzzlab' agar efeknya jalan."

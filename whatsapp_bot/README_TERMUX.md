@@ -49,26 +49,20 @@ Bot sekarang sudah jalan 24 jam! Anda bisa menutup Termux.
 
 ---
 
-## ⚡ Langkah 3: Autostart (Opsional)
-Agar bot otomatis nyala sendiri saat **HP Restart** (mati lalu hidup lagi).
-Agar bot tidak mati saat layar HP mati atau setelah HP direstart.
+## ⚡ Langkah 3: Autostart (Otomatis Nyala)
+Agar bot otomatis hidup kembali saat Anda membuka Termux (misalnya setelah HP restart).
 
 1. Jalankan script autostart:
    ```bash
    bash setup_autostart.sh
    ```
-2. Jika diminta akses notifikasi/baterai, izinkan.
-3. Periksa notifikasi bar HP Anda. Pastikan ada tulisan **"Termux - Wake lock held"**.
 
-### ⚠️ Penting: Jika HP Direstart
-Karena Termux:Boot kadang bermasalah di beberapa HP, jika HP Anda mati/restart, lakukan ini untuk menghidupkan bot lagi:
+**Cara Kerja:**
+- Saat HP baru nyala, **buka aplikasi Termux sebentar**.
+- Bot akan otomatis "bangun" dan jalan lagi.
+- Setelah itu Termux boleh ditutup.
 
-1. Buka Termux.
-2. Ketik:
-   ```bash
-   pm2 resurrect
-   ```
-3. Selesai! Bot kembali online.
+
 
 ---
 

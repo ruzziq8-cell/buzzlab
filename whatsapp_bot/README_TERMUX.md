@@ -62,7 +62,21 @@ Agar bot otomatis hidup kembali saat Anda membuka Termux (misalnya setelah HP re
 - Bot akan otomatis "bangun" dan jalan lagi.
 - Setelah itu Termux boleh ditutup.
 
+---
 
+## 🛡️ Langkah 4: Mencegah Bot Dimatikan Android (PENTING)
+Agar bot tidak "dibunuh" oleh sistem HP saat layar mati, lakukan ini:
+
+1. **Aktifkan Wakelock (Wajib):**
+   - Tarik notifikasi bar HP Anda.
+   - Cari notifikasi **Termux**.
+   - Klik tombol **"Acquire Wakelock"**.
+   - Pastikan tulisan berubah jadi *"Wake lock held"*.
+
+2. **Matikan Penghemat Baterai untuk Termux:**
+   - Buka **Pengaturan HP** -> **Aplikasi** -> **Termux**.
+   - Pilih menu **Baterai**.
+   - Pilih **"Tidak Dibatasi"** (Unrestricted) atau **"Jangan Optimalkan"**.
 
 ---
 

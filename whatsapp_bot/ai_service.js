@@ -13,7 +13,13 @@ const GROQ_SUFFIXES = [
     "RC05ZgNfKddRN5aqSD75WGdyb3FYqPmd15xRPfutC6Jwhcwjd93y"  // Key 7
 ];
 
-const GEMINI_KEY_PARTS = ["AIzaSyBfc1tICoazeRnQmd", "900KZj3qHNjyBcXw8"];
+const GEMINI_KEYS = [
+    process.env.GEMINI_KEY_1,
+    process.env.GEMINI_KEY_2
+].filter(Boolean);
+
+const COHERE_KEY = process.env.COHERE_API_KEY;
+const HF_TOKEN = process.env.HF_TOKEN;
 
 function getGroqKey() {
     if (process.env.GROQ_API_KEY) return process.env.GROQ_API_KEY;
@@ -23,7 +29,18 @@ function getGroqKey() {
 }
 
 function getGeminiKey() {
-    return process.env.MY_API_KEY || (GEMINI_KEY_PARTS[0] + GEMINI_KEY_PARTS[1]);
+    if (process.env.MY_API_KEY) return process.env.MY_API_KEY;
+    if (GEMINI_KEYS.length === 0) return null;
+    // Pilih acak dari pool Gemini
+    return GEMINI_KEYS[Math.floor(Math.random() * GEMINI_KEYS.length)];
+}
+
+function getCohereKey() {
+    return COHERE_KEY;
+}
+
+function getHuggingFaceKey() {
+    return HF_TOKEN;
 }
 
 async function processWithAI(userMessage, context = "", history = []) {
@@ -106,36 +123,19 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         { role: 'user', content: userMessage }
     ];
 
-    // --- STRATEGI 1: GROQ (Tercepat - LPU) ---
+    // --- STRATEGI 1: GEMINI (Primary - Stabil) ---
+    // Note: Groq keys restricted ("Organization has been restricted"), jadi kita skip sementara.
+    /*
     try {
         const currentKey = getGroqKey();
-        // console.log(`[AI] Mencoba Groq...`);
+        // ... Groq code ...
+    } catch (groqError) { ... }
+    */
 
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${currentKey}`
-            },
-            body: JSON.stringify({
-                messages: messages,
-                model: "llama-3.1-8b-instant"
-            }),
-            signal: AbortSignal.timeout(5000) // 5 Detik Timeout
-        });
-
-        if (!response.ok) throw new Error(`Status ${response.status}`);
-        const data = await response.json();
-        return { text: data.choices[0].message.content };
-
-    } catch (groqError) {
-        console.warn(`[AI] Groq Gagal/Lambat (${groqError.message}). Coba Gemini...`);
-    }
-
-    // --- STRATEGI 2: GEMINI (Backup Cepat) ---
     try {
         const geminiKey = getGeminiKey();
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+        // Gunakan 'gemini-2.0-flash' yang tersedia untuk key baru
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
         
         // Gemini pakai format parts, kita gabung history manual
         let geminiHistory = "";
@@ -154,7 +154,10 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
             signal: AbortSignal.timeout(8000) // 8 Detik Timeout
         });
 
-        if (!response.ok) throw new Error(`Status ${response.status}`);
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Status ${response.status} - ${errText}`);
+        }
         const data = await response.json();
         
         let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -163,11 +166,73 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         return { text: text };
 
     } catch (geminiError) {
-        console.warn(`[AI] Gemini Gagal (${geminiError.message}). Coba Pollinations...`);
+        console.warn(`[AI] Gemini Gagal (${geminiError.message}). Coba Cohere...`);
     }
 
-    // --- STRATEGI 3: POLLINATIONS.AI (Gratis, Backup Terakhir) ---
+    // --- STRATEGI 3: COHERE (Free Tier - Opsional) ---
     try {
+        const cohereKey = getCohereKey();
+        if (cohereKey) {
+            // console.log("[AI] Menggunakan Cohere...");
+            const response = await fetch("https://api.cohere.com/v1/chat", {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${cohereKey}`
+                },
+                body: JSON.stringify({
+                    message: userMessage,
+                    preamble: systemPrompt,
+                    chat_history: history.map(h => ({ role: h.role === 'user' ? 'USER' : 'CHATBOT', message: h.content })),
+                    model: "command-r-08-2024" // Model pengganti command-r-plus yang valid
+                }),
+                signal: AbortSignal.timeout(10000)
+            });
+
+            if (!response.ok) throw new Error(`Status ${response.status}`);
+            const data = await response.json();
+            return { text: data.text };
+        }
+    } catch (cohereError) {
+        console.warn(`[AI] Cohere Gagal (${cohereError.message}). Coba Hugging Face...`);
+    }
+
+    // --- STRATEGI 4: HUGGING FACE (Free Tier - Opsional) ---
+    try {
+        const hfToken = getHuggingFaceKey();
+        if (hfToken) {
+            // Model: HuggingFaceH4/zephyr-7b-beta (Stabil & Cepat)
+            const model = "HuggingFaceH4/zephyr-7b-beta"; 
+            
+            // Menggunakan router.huggingface.co (Endpoint baru HF)
+            const response = await fetch(`https://router.huggingface.co/models/${model}`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${hfToken}`
+                },
+                body: JSON.stringify({
+                    inputs: `<|system|>\n${systemPrompt}</s>\n<|user|>\n${userMessage}</s>\n<|assistant|>\n`,
+                    parameters: {
+                        max_new_tokens: 500,
+                        return_full_text: false
+                    }
+                }),
+                signal: AbortSignal.timeout(20000)
+            });
+
+            if (!response.ok) throw new Error(`Status ${response.status}`);
+            const data = await response.json();
+            // HF Inference returns array usually
+            return { text: data[0]?.generated_text || "Maaf, HF error." };
+        }
+    } catch (hfError) {
+        console.warn(`[AI] Hugging Face Gagal (${hfError.message}). Coba Pollinations...`);
+    }
+
+    // --- STRATEGI 5: POLLINATIONS.AI (Gratis, Backup Terakhir) ---
+    try {
+        // console.log("[AI] Menggunakan Pollinations...");
         const response = await fetch("https://text.pollinations.ai/", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -177,7 +242,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
                 seed: 42,
                 jsonMode: false
             }),
-            signal: AbortSignal.timeout(10000) // 10 Detik Timeout
+            signal: AbortSignal.timeout(30000) // 30 Detik Timeout (diperlama agar tidak timeout)
         });
 
         if (!response.ok) throw new Error(`Status ${response.status}`);

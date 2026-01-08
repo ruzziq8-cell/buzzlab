@@ -6,9 +6,20 @@ CREATE TABLE IF NOT EXISTS public.scheduled_messages (
     message TEXT NOT NULL,
     scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
+    repeat_interval TEXT DEFAULT 'none' CHECK (repeat_interval IN ('none', 'daily', 'weekly', 'monthly')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Tambahkan kolom repeat_interval jika belum ada (Migration)
+DO $$ 
+BEGIN
+    BEGIN
+        ALTER TABLE public.scheduled_messages ADD COLUMN repeat_interval TEXT DEFAULT 'none' CHECK (repeat_interval IN ('none', 'daily', 'weekly', 'monthly'));
+    EXCEPTION
+        WHEN duplicate_column THEN NULL;
+    END;
+END $$;
 
 -- Enable RLS
 ALTER TABLE public.scheduled_messages ENABLE ROW LEVEL SECURITY;
@@ -30,12 +41,15 @@ BEGIN
 END $$;
 
 -- Function for Bot to fetch pending messages (SECURITY DEFINER to bypass RLS)
+-- Updated to include repeat_interval
+DROP FUNCTION IF EXISTS get_pending_scheduled_messages();
 CREATE OR REPLACE FUNCTION get_pending_scheduled_messages()
 RETURNS TABLE (
   id BIGINT,
   phone_number TEXT,
   message TEXT,
-  scheduled_at TIMESTAMP WITH TIME ZONE
+  scheduled_at TIMESTAMP WITH TIME ZONE,
+  repeat_interval TEXT
 ) 
 SECURITY DEFINER
 AS $$
@@ -45,7 +59,8 @@ BEGIN
     sm.id,
     sm.phone_number,
     sm.message,
-    sm.scheduled_at
+    sm.scheduled_at,
+    sm.repeat_interval
   FROM public.scheduled_messages sm
   WHERE 
     sm.status = 'pending' 
@@ -53,14 +68,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function for Bot to mark message as sent
-CREATE OR REPLACE FUNCTION mark_scheduled_message_sent(msg_id BIGINT, new_status TEXT)
+-- Function for Bot to mark message as sent AND reschedule if needed
+DROP FUNCTION IF EXISTS mark_scheduled_message_sent(BIGINT, TEXT);
+CREATE OR REPLACE FUNCTION mark_scheduled_message_sent(msg_id BIGINT, new_status TEXT, next_schedule TIMESTAMP WITH TIME ZONE DEFAULT NULL)
 RETURNS VOID
 SECURITY DEFINER
 AS $$
 BEGIN
-  UPDATE public.scheduled_messages
-  SET status = new_status, updated_at = NOW()
-  WHERE id = msg_id;
+  IF next_schedule IS NOT NULL THEN
+    -- Jika ada repeat, reset status ke 'pending' dan update waktu jadwal
+    UPDATE public.scheduled_messages
+    SET status = 'pending', scheduled_at = next_schedule, updated_at = NOW()
+    WHERE id = msg_id;
+  ELSE
+    -- Jika tidak repeat, mark as sent/failed
+    UPDATE public.scheduled_messages
+    SET status = new_status, updated_at = NOW()
+    WHERE id = msg_id;
+  END IF;
 END;
 $$ LANGUAGE plpgsql;

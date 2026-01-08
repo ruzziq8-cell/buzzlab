@@ -44,10 +44,28 @@ async function checkScheduledMessages(client) {
                 console.log(`[Scheduler] Sending to ${chatId}: "${msg.message}"`);
                 await client.sendMessage(chatId, msg.message);
 
-                // Mark as sent
+                // Calculate next schedule if repeating
+                let nextSchedule = null;
+                if (msg.repeat_interval && msg.repeat_interval !== 'none') {
+                    const currentSchedule = new Date(msg.scheduled_at);
+                    
+                    if (msg.repeat_interval === 'daily') {
+                        currentSchedule.setDate(currentSchedule.getDate() + 1);
+                    } else if (msg.repeat_interval === 'weekly') {
+                        currentSchedule.setDate(currentSchedule.getDate() + 7);
+                    } else if (msg.repeat_interval === 'monthly') {
+                        currentSchedule.setMonth(currentSchedule.getMonth() + 1);
+                    }
+                    
+                    nextSchedule = currentSchedule.toISOString();
+                    console.log(`[Scheduler] Rescheduling message ${msg.id} to ${nextSchedule} (${msg.repeat_interval})`);
+                }
+
+                // Mark as sent (and reschedule if needed)
                 const { error: updateError } = await supabase.rpc('mark_scheduled_message_sent', {
                     msg_id: msg.id,
-                    new_status: 'sent'
+                    new_status: 'sent',
+                    next_schedule: nextSchedule
                 });
 
                 if (updateError) console.error('[Scheduler] Failed to update status:', updateError);

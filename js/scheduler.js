@@ -62,16 +62,21 @@ function renderList(messages) {
         
         const statusClass = `status-${msg.status}`;
         
+        let repeatBadge = '';
+        if (msg.repeat_interval && msg.repeat_interval !== 'none') {
+            repeatBadge = ` <span style="font-size:0.8rem; background:#3b82f6; color:white; padding:2px 6px; border-radius:8px;">🔄 ${msg.repeat_interval}</span>`;
+        }
+        
         const li = document.createElement('li');
         li.className = 'message-item';
         li.innerHTML = `
             <div class="message-info">
-                <h4>📱 ${msg.phone_number} <span class="status-badge ${statusClass}">${msg.status}</span></h4>
+                <h4>📱 ${msg.phone_number} <span class="status-badge ${statusClass}">${msg.status}</span>${repeatBadge}</h4>
                 <p>"${msg.message}"</p>
                 <div class="message-meta">📅 ${dateStr} ⏰ ${timeStr}</div>
             </div>
             <div>
-                ${msg.status === 'pending' ? `<button onclick="deleteMessage(${msg.id})" class="btn-small btn-danger">Hapus</button>` : ''}
+                <button onclick="deleteMessage(${msg.id})" class="btn-small btn-danger">Hapus</button>
             </div>
         `;
         list.appendChild(li);
@@ -85,6 +90,7 @@ async function handleSchedule(e) {
     const message = document.getElementById('message').value;
     const date = document.getElementById('date').value;
     const time = document.getElementById('time').value;
+    const repeat = document.getElementById('repeat').value || 'none';
 
     if (!phone || !message || !date || !time) return;
 
@@ -114,7 +120,8 @@ async function handleSchedule(e) {
             phone_number: cleanPhone,
             message: message,
             scheduled_at: scheduledAt.toISOString(),
-            status: 'pending'
+            status: 'pending',
+            repeat_interval: repeat
         });
 
     if (error) {

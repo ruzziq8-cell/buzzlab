@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const { processWithAI } = require('./ai_service');
 
 async function testCohere() {
@@ -17,11 +18,11 @@ async function testCohere() {
                 message: "Halo, tes koneksi. Jawab 'OK' saja.",
                 model: "command-r-08-2024"
             }),
-            signal: AbortSignal.timeout(10000)
+            signal: AbortSignal.timeout(15000)
         });
 
         if (!response.ok) {
-            console.error("Cohere Error:", await response.text());
+            console.error("Cohere Error:", response.status, await response.text());
         } else {
             const data = await response.json();
             console.log("✅ Cohere Success:", data.text);
@@ -34,23 +35,19 @@ async function testCohere() {
 async function testHF() {
     console.log("\nTesting Hugging Face Backup...");
     const HF_TOKEN = process.env.HF_TOKEN;
-    // Using Qwen which is usually available
-    const model = "Qwen/Qwen2.5-Coder-32B-Instruct";
+    const model = "google/gemma-1.1-7b-it"; // Very standard model
 
     try {
-        console.log("Sending request to Hugging Face...");
-        const response = await fetch(`https://router.huggingface.co/models/${model}`, {
+        console.log(`Sending request to Hugging Face (${model})...`);
+        const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${HF_TOKEN}`
             },
             body: JSON.stringify({
-                inputs: `<|im_start|>system\nJawab singkat.<|im_end|>\n<|im_start|>user\nHalo<|im_end|>\n<|im_start|>assistant\n`,
-                parameters: {
-                    max_new_tokens: 50,
-                    return_full_text: false
-                }
+                inputs: "Halo",
+                parameters: { max_new_tokens: 50 }
             }),
             signal: AbortSignal.timeout(20000)
         });

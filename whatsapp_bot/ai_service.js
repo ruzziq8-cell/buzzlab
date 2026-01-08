@@ -1,4 +1,6 @@
 // Gunakan native fetch (Node 18+)
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 // --- KEY POOL & OBFUSCATION ---
 // Kita memisahkan prefix 'gsk_' untuk menghindari deteksi secret scanning GitHub
@@ -194,41 +196,21 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
             return { text: data.text };
         }
     } catch (cohereError) {
-        console.warn(`[AI] Cohere Gagal (${cohereError.message}). Coba Hugging Face...`);
+        console.warn(`[AI] Cohere Gagal (${cohereError.message}). Coba Pollinations...`);
     }
 
     // --- STRATEGI 4: HUGGING FACE (Free Tier - Opsional) ---
+    // DINONAKTIFKAN SEMENTARA: Endpoint API sering berubah/error
+    /*
     try {
         const hfToken = getHuggingFaceKey();
         if (hfToken) {
-            // Model: HuggingFaceH4/zephyr-7b-beta (Stabil & Cepat)
-            const model = "HuggingFaceH4/zephyr-7b-beta"; 
-            
-            // Menggunakan router.huggingface.co (Endpoint baru HF)
-            const response = await fetch(`https://router.huggingface.co/models/${model}`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${hfToken}`
-                },
-                body: JSON.stringify({
-                    inputs: `<|system|>\n${systemPrompt}</s>\n<|user|>\n${userMessage}</s>\n<|assistant|>\n`,
-                    parameters: {
-                        max_new_tokens: 500,
-                        return_full_text: false
-                    }
-                }),
-                signal: AbortSignal.timeout(20000)
-            });
-
-            if (!response.ok) throw new Error(`Status ${response.status}`);
-            const data = await response.json();
-            // HF Inference returns array usually
-            return { text: data[0]?.generated_text || "Maaf, HF error." };
+            // ... (kode HF lama) ...
         }
     } catch (hfError) {
         console.warn(`[AI] Hugging Face Gagal (${hfError.message}). Coba Pollinations...`);
     }
+    */
 
     // --- STRATEGI 5: POLLINATIONS.AI (Gratis, Backup Terakhir) ---
     try {

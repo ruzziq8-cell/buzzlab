@@ -1,34 +1,47 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
-const API_KEY = "AIzaSyBiaIBu_pb73YFGxsi1qf6E8qeaoDjaCnQ"; // New Key
+const KEYS = [
+    process.env.GEMINI_KEY_1,
+    process.env.GEMINI_KEY_2
+].filter(Boolean);
 
-async function checkModels() {
-    console.log("Checking models with key:", API_KEY);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`;
+async function checkKey(key, index) {
+    console.log(`\nTesting Gemini Key ${index + 1}...`);
+    // Menggunakan endpoint generateContent langsung untuk tes fungsional
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
     
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: "Tes koneksi. Jawab 'OK' saja." }] }]
+            })
+        });
+
         const data = await response.json();
         
         if (!response.ok) {
-            console.error("Error fetching models:", data);
-            return;
-        }
-        
-        console.log("Available Models:");
-        if (data.models) {
-            data.models.forEach(m => {
-                if (m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent")) {
-                    console.log(`- ${m.name} (${m.displayName})`);
-                }
-            });
+            console.error(`❌ Key ${index + 1} Error:`, data.error?.message || data);
         } else {
-            console.log("No models found in response:", data);
+            console.log(`✅ Key ${index + 1} Success! Response:`, data.candidates?.[0]?.content?.parts?.[0]?.text?.trim());
         }
-        
     } catch (error) {
-        console.error("Fetch error:", error);
+        console.error(`❌ Key ${index + 1} Network Error:`, error.message);
     }
 }
 
-checkModels();
+async function runTests() {
+    console.log("=== GEMINI API TEST ===");
+    if (KEYS.length === 0) {
+        console.error("No Gemini keys found in .env!");
+        return;
+    }
+    
+    for (let i = 0; i < KEYS.length; i++) {
+        await checkKey(KEYS[i], i);
+    }
+}
+
+runTests();

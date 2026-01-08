@@ -3,32 +3,37 @@
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-echo -e "${GREEN}=== SETUP AUTOSTART (Saat Termux Dibuka) ===${NC}"
+echo -e "${GREEN}=== SETUP AUTOSTART 24 JAM (Termux:Boot) ===${NC}"
 
-# 1. Cek file .bashrc (file konfigurasi terminal)
-CONFIG_FILE="$HOME/.bashrc"
-
-# 2. Cek apakah sudah ada perintah autostart
-if grep -q "pm2 resurrect" "$CONFIG_FILE" 2>/dev/null; then
-    echo "[i] Autostart sudah aktif di Termux Anda."
-else
-    echo "[+] Menambahkan perintah autostart..."
-    # Tambahkan perintah untuk menghidupkan bot yang disimpan
-    # >> /dev/null 2>&1 agar tidak muncul pesan error jika belum ada save
-    echo "" >> "$CONFIG_FILE"
-    echo "# Autostart Bot WhatsApp" >> "$CONFIG_FILE"
-    echo "pm2 resurrect >> /dev/null 2>&1" >> "$CONFIG_FILE" 
-    echo "[+] Berhasil!"
+# Cek apakah user sudah install Termux:Boot
+if [ ! -d "$HOME/.termux/boot" ]; then
+    echo "[+] Membuat folder boot..."
+    mkdir -p "$HOME/.termux/boot"
 fi
 
+echo "[+] Membuat script boot..."
+
+# Buat script start_bot.sh di folder boot
+cat > "$HOME/.termux/boot/start_bot.sh" << 'EOF'
+#!/data/data/com.termux/files/usr/bin/sh
+termux-wake-lock
+sshd
+cd ~/storage/downloads/todolist/whatsapp_bot
+pm2 start ecosystem.config.js --env production
+EOF
+
+chmod +x "$HOME/.termux/boot/start_bot.sh"
+
+echo -e "${GREEN}✅ SCRIPT AUTOSTART BERHASIL DIBUAT!${NC}"
 echo ""
-echo -e "${GREEN}✅ SELESAI!${NC}"
 echo "---------------------------------------"
-echo "Cara kerja:"
-echo "1. Setelah HP Anda di-restart (mati lampu/habis baterai)."
-echo "2. Cukup **BUKA APLIKASI TERMUX SEKALI**."
-echo "3. Bot akan otomatis nyala sendiri."
-echo "4. Anda boleh langsung tutup/minimize Termux lagi."
+echo "⚠️  SYARAT AGAR BERJALAN OTOMATIS SAAT HP RESTART:"
+echo "1. Pastikan Anda sudah menginstall aplikasi **Termux:Boot** dari F-Droid atau Play Store."
+echo "2. Buka aplikasi Termux:Boot sekali saja."
+echo "3. Matikan optimasi baterai untuk Termux & Termux:Boot di pengaturan HP."
+echo "4. Berikan izin 'Autostart' (Mulai Otomatis) jika ada di pengaturan HP (biasanya di Xiaomi/Oppo/Vivo)."
 echo ""
-echo "⚠️ PENTING: Agar tidak dimatikan Android:"
-echo "   Tarik notifikasi bar -> Termux -> Klik 'Acquire Wakelock'"
+echo "Cara kerja:"
+echo "- Saat HP nyala kembali, script ini akan otomatis berjalan di background."
+echo "- Anda TIDAK PERLU membuka aplikasi Termux lagi."
+echo "---------------------------------------"

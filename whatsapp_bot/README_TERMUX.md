@@ -13,9 +13,9 @@ Ini adalah panduan step-by-step untuk menjalankan bot WhatsApp BuzzLab di HP And
 Saya sudah menyiapkan script otomatis. Anda hanya perlu menjalankan satu perintah.
 
 1. Buka Termux.
-2. Masuk ke folder bot (folder "buzzlab"):
+2. Masuk ke folder bot:
    ```bash
-   cd ~/buzzlab
+   cd ~/buzzlab/whatsapp_bot
    ```
 3. Jalankan script setup:
    ```bash
@@ -28,23 +28,29 @@ Saya sudah menyiapkan script otomatis. Anda hanya perlu menjalankan satu perinta
 
 ---
 
-## 🟢 Langkah 2: Menjalankan Bot
-Setelah instalasi selesai, saatnya menyalakan bot.
+## 🟢 Langkah 2: Menjalankan Bot (Mode 24 Jam)
+Setelah instalasi selesai, jalankan script ini agar bot jalan terus di background:
 
-1. Jalankan perintah start:
+1. Masuk folder bot (jika belum):
    ```bash
-   pm2 start index.js --name buzzlab
+   cd ~/buzzlab/whatsapp_bot
    ```
-2. Tunggu sebentar, lalu cek apakah QR Code sudah muncul. Biasanya muncul di log:
+2. Jalankan script start:
+   ```bash
+   bash start_24h.sh
+   ```
+3. Cek log untuk scan QR Code:
    ```bash
    pm2 logs buzzlab
    ```
-   *(Tekan `Ctrl+C` untuk keluar dari tampilan log. Bot tetap jalan di background)*
-3. Scan QR Code menggunakan WhatsApp di HP Anda (Linked Devices).
+   *(Tekan `Ctrl+C` untuk keluar dari log)*
+
+Bot sekarang sudah jalan 24 jam! Anda bisa menutup Termux.
 
 ---
 
-## ⚡ Langkah 3: Membuat Bot Jalan 24 Jam (Autostart)
+## ⚡ Langkah 3: Autostart (Opsional)
+Agar bot otomatis nyala sendiri saat **HP Restart** (mati lalu hidup lagi).
 Agar bot tidak mati saat layar HP mati atau setelah HP direstart.
 
 1. Jalankan script autostart:

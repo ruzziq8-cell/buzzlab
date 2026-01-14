@@ -6,7 +6,6 @@ const fs = require('fs');
 const http = require('http');
 const { processWithAI } = require('./ai_service');
 const { checkScheduledMessages } = require('./scheduler_service');
-const PDFDocument = require('pdfkit');
 
 const EMPTY_EXPORT_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAQklEQVR4Xu3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4G0BNwABYB1K3AAAAABJRU5ErkJggg==';
 
@@ -96,62 +95,6 @@ const getUserSupabase = (accessToken) => {
 };
 
 const authSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const generateTasksPdf = (tasks, title, subtitle) => {
-    return new Promise((resolve, reject) => {
-        const doc = new PDFDocument({ margin: 40 });
-        const chunks = [];
-        doc.on('data', chunk => chunks.push(chunk));
-        doc.on('end', () => resolve(Buffer.concat(chunks)));
-        doc.on('error', reject);
-        doc.fontSize(18).text(title, { align: 'center' });
-        doc.moveDown(0.5);
-        if (subtitle) {
-            doc.fontSize(12).text(subtitle, { align: 'center' });
-            doc.moveDown();
-        }
-        if (!tasks || tasks.length === 0) {
-            doc.fontSize(12).text('Tidak ada tugas untuk periode ini.');
-        } else {
-            tasks.forEach((task, index) => {
-                const lineNumber = index + 1;
-                const titleText = task.title || '(Tanpa judul)';
-                let dueText = '';
-                if (task.due_date) {
-                    try {
-                        const d = new Date(task.due_date);
-                        dueText = d.toLocaleString('id-ID', {
-                            timeZone: 'Asia/Jakarta',
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        }).replace('.', ':');
-                    } catch (e) {
-                        dueText = task.due_date;
-                    }
-                }
-                const priorityText = task.priority || 'medium';
-                const statusText = task.status || 'active';
-                let header = `${lineNumber}. ${titleText}`;
-                doc.fontSize(13).text(header);
-                const metaParts = [];
-                if (dueText) metaParts.push(`Tenggat: ${dueText}`);
-                if (priorityText) metaParts.push(`Prioritas: ${priorityText}`);
-                if (statusText) metaParts.push(`Status: ${statusText}`);
-                if (metaParts.length > 0) {
-                    doc.fontSize(11).text(metaParts.join(' | '));
-                }
-                if (task.description) {
-                    doc.fontSize(11).text(task.description);
-                }
-                doc.moveDown(0.75);
-            });
-        }
-        doc.end();
-    });
-};
 
 const checkReminders = async () => {
     // Pastikan client sudah siap (sudah scan QR dan login)

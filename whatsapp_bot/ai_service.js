@@ -125,53 +125,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         { role: 'user', content: userMessage }
     ];
 
-    // --- STRATEGI 1: GEMINI (Primary - Stabil) ---
-    // Note: Groq keys restricted ("Organization has been restricted"), jadi kita skip sementara.
-    /*
-    try {
-        const currentKey = getGroqKey();
-        // ... Groq code ...
-    } catch (groqError) { ... }
-    */
-
-    try {
-        const geminiKey = getGeminiKey();
-        // Gunakan 'gemini-2.0-flash' yang tersedia untuk key baru
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
-        
-        // Gemini pakai format parts, kita gabung history manual
-        let geminiHistory = "";
-        if (history.length > 0) {
-            geminiHistory = "\nRIWAYAT CHAT SEBELUMNYA:\n" + history.map(h => `${h.role === 'user' ? 'User' : 'AI'}: ${h.content}`).join('\n') + "\n";
-        }
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: `${systemPrompt}\n${geminiHistory}\nUser: ${userMessage}` }]
-                }]
-            }),
-            signal: AbortSignal.timeout(8000) // 8 Detik Timeout
-        });
-
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Status ${response.status} - ${errText}`);
-        }
-        const data = await response.json();
-        
-        let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) throw new Error("Format respons Gemini tidak valid");
-        
-        return { text: text };
-
-    } catch (geminiError) {
-        console.warn(`[AI] Gemini Gagal (${geminiError.message}). Coba Cohere...`);
-    }
-
-    // --- STRATEGI 3: COHERE (Free Tier - Opsional) ---
+    // --- STRATEGI 1: COHERE (Primary) ---
     try {
         const cohereKey = getCohereKey();
         if (cohereKey) {
@@ -212,7 +166,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
     }
     */
 
-    // --- STRATEGI 5: POLLINATIONS.AI (Gratis, Backup Terakhir) ---
+    // --- STRATEGI 2: POLLINATIONS.AI (Gratis, Backup sebelum Gemini) ---
     try {
         // console.log("[AI] Menggunakan Pollinations...");
         const response = await fetch("https://text.pollinations.ai/", {
@@ -230,10 +184,49 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         if (!response.ok) throw new Error(`Status ${response.status}`);
         return { text: await response.text() };
 
-    } catch (error) {
-        console.error(`[AI] Semua Provider Gagal:`, error);
-        return { text: "Maaf, otak saya sedang nge-lag parah. Coba lagi nanti ya! 🤯" };
+    } catch (pollError) {
+        console.warn(`[AI] Pollinations Gagal (${pollError.message}). Coba Gemini (opsi terakhir)...`);
     }
+
+    // --- STRATEGI 3: GEMINI (OPSIONAL, PALING TERAKHIR) ---
+    try {
+        const geminiKey = getGeminiKey();
+        if (geminiKey) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+            
+            let geminiHistory = "";
+            if (history.length > 0) {
+                geminiHistory = "\nRIWAYAT CHAT SEBELUMNYA:\n" + history.map(h => `${h.role === 'user' ? 'User' : 'AI'}: ${h.content}`).join('\n') + "\n";
+            }
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{ text: `${systemPrompt}\n${geminiHistory}\nUser: ${userMessage}` }]
+                    }]
+                }),
+                signal: AbortSignal.timeout(8000)
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Status ${response.status} - ${errText}`);
+            }
+            const data = await response.json();
+            
+            let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) throw new Error("Format respons Gemini tidak valid");
+            
+            return { text };
+        }
+    } catch (geminiError) {
+        console.warn(`[AI] Gemini Gagal (${geminiError.message}). Semua provider gagal.`);
+    }
+
+    console.error(`[AI] Semua Provider Gagal: Cohere, Pollinations, dan Gemini.`);
+    return { text: "Maaf, otak saya sedang nge-lag parah. Coba lagi nanti ya! 🤯" };
 }
 
 module.exports = { processWithAI };

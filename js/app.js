@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const searchInput = document.getElementById('search-input');
     const filterDateSelect = document.getElementById('filter-date');
     const sortSelect = document.getElementById('sort-select');
+    const btnExportTasksDaily = document.getElementById('export-tasks-daily');
+    const btnExportTasksWeekly = document.getElementById('export-tasks-weekly');
+    const btnExportTasksMonthly = document.getElementById('export-tasks-monthly');
 
     // Modals
     const editModal = document.getElementById('edit-modal');
@@ -425,6 +428,173 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     };
 
+    const exportTasks = (period) => {
+        if (!tasks || tasks.length === 0) {
+            alert('Tidak ada tugas untuk diexport.');
+            return;
+        }
+
+        const today = new Date();
+        const todayStr = DateUtils.getLocalYMD(today);
+        const todayTime = DateUtils.parseLocal(todayStr);
+
+        const filtered = tasks.filter(task => {
+            if (!task.due_date) return false;
+            const taskDateStr = task.due_date.substring(0, 10);
+
+            if (period === 'daily') {
+                return taskDateStr === todayStr;
+            }
+
+            if (period === 'weekly') {
+                const taskTime = DateUtils.parseLocal(taskDateStr);
+                const nextWeekTime = todayTime + (7 * 24 * 60 * 60 * 1000);
+                return taskTime >= todayTime && taskTime <= nextWeekTime;
+            }
+
+            if (period === 'monthly') {
+                return taskDateStr.substring(0, 7) === todayStr.substring(0, 7);
+            }
+
+            return true;
+        });
+
+        if (!filtered || filtered.length === 0) {
+            alert('Tidak ada tugas untuk periode ini.');
+            return;
+        }
+
+        const printArea = document.getElementById('print-area');
+        if (!printArea) return;
+
+        const dateStr = new Date().toLocaleDateString('id-ID', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        const userName = currentUser.user_metadata?.name || currentUser.email;
+
+        const periodLabel = period === 'daily' 
+            ? 'Harian (Hari Ini)'
+            : period === 'weekly'
+            ? 'Mingguan (7 Hari Ke Depan)'
+            : 'Bulanan (Bulan Ini)';
+
+        let tableRows = '';
+
+        const sortedTasks = [...filtered].sort((a, b) => {
+            if (!a.due_date) return 1;
+            if (!b.due_date) return -1;
+            return new Date(a.due_date) - new Date(b.due_date);
+        });
+
+        const totalTasks = sortedTasks.length;
+        const completedTasks = sortedTasks.filter(t => t.status === 'completed').length;
+        const activeTasks = sortedTasks.filter(t => t.status === 'active').length;
+
+        const todayStrLocal = DateUtils.getLocalYMD(new Date());
+        const overdueTasks = sortedTasks.filter(t => {
+            if (t.status === 'completed' || !t.due_date) return false;
+            return t.due_date < todayStrLocal;
+        }).length;
+
+        const completionRate = totalTasks > 0 
+            ? Math.round((completedTasks / totalTasks) * 100) 
+            : 0;
+
+        if (sortedTasks.length === 0) {
+            tableRows = '<tr><td colspan="6" style="text-align:center">Tidak ada tugas.</td></tr>';
+        } else {
+            sortedTasks.forEach((task, index) => {
+                const statusClass = task.status === 'active' ? 'status-active' : 'status-completed';
+                const priorityClass = `priority-${task.priority}`;
+                const dueDate = task.due_date ? new Date(task.due_date).toLocaleDateString('id-ID') : '-';
+                const statusLabel = task.status === 'active' ? 'Aktif' : 'Selesai';
+                
+                const isOverdue = task.status === 'active' && task.due_date && task.due_date < todayStrLocal;
+                const dateStyle = isOverdue ? 'color: var(--danger-color); font-weight: bold;' : '';
+                const dateDisplay = isOverdue ? `${dueDate} (Terlambat)` : dueDate;
+                
+                let completedAtDisplay = '-';
+                if (task.status === 'completed') {
+                    if (task.completed_at) {
+                        const doneDate = new Date(task.completed_at);
+                        completedAtDisplay = doneDate.toLocaleDateString('id-ID', {
+                             day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                        });
+                    } else {
+                        completedAtDisplay = '<span style="color: #999; font-style: italic;">(Tak tercatat)</span>';
+                    }
+                }
+
+                tableRows += `
+                    <tr>
+                        <td style="text-align:center">${index + 1}</td>
+                        <td>
+                            <strong>${escapeHtml(task.title)}</strong>
+                            ${task.description ? `<br><small>${escapeHtml(task.description)}</small>` : ''}
+                        </td>
+                        <td style="${dateStyle}">${dateDisplay}</td>
+                        <td class="${priorityClass}" style="text-transform:capitalize">${task.priority}</td>
+                        <td class="${statusClass}">${statusLabel}</td>
+                        <td>${completedAtDisplay}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        printArea.innerHTML = `
+            <div class="print-header">
+                <h1>Laporan Tugas (${periodLabel})</h1>
+                <p class="print-date">
+                    User: <strong>${escapeHtml(userName)}</strong><br>
+                    Dicetak pada: ${dateStr}
+                </p>
+                
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Tugas</span>
+                        <span class="stat-value">${totalTasks}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Selesai</span>
+                        <span class="stat-value text-success">${completedTasks}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Pending</span>
+                        <span class="stat-value text-warning">${activeTasks}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Terlambat</span>
+                        <span class="stat-value text-danger">${overdueTasks}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Penyelesaian</span>
+                        <span class="stat-value">${completionRate}%</span>
+                    </div>
+                </div>
+            </div>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th style="width: 5%">No</th>
+                        <th style="width: 35%">Tugas & Deskripsi</th>
+                        <th style="width: 15%">Tenggat</th>
+                        <th style="width: 10%">Prioritas</th>
+                        <th style="width: 15%">Status</th>
+                        <th style="width: 20%">Selesai Pada</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+        `;
+
+        window.print();
+    };
+
     // Add Task
     addTaskForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -648,6 +818,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentSort = e.target.value;
         renderTasks();
     });
+
+    if (btnExportTasksDaily) {
+        btnExportTasksDaily.addEventListener('click', () => exportTasks('daily'));
+    }
+    if (btnExportTasksWeekly) {
+        btnExportTasksWeekly.addEventListener('click', () => exportTasks('weekly'));
+    }
+    if (btnExportTasksMonthly) {
+        btnExportTasksMonthly.addEventListener('click', () => exportTasks('monthly'));
+    }
 
     // Print Logic
     const btnExportPdf = document.getElementById('btn-export-pdf');

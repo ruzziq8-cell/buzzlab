@@ -174,52 +174,81 @@ async function exportMessages(period) {
         return;
     }
 
-    const headers = [
-        'id',
-        'phone_number',
-        'message',
-        'scheduled_at',
-        'status',
-        'repeat_interval',
-        'created_at',
-        'updated_at'
-    ];
+    const printArea = document.getElementById('scheduler-print-area');
+    if (!printArea) return;
 
-    const escapeCell = (value) => {
-        const str = value == null ? '' : String(value);
-        return '"' + str.replace(/"/g, '""') + '"';
-    };
-
-    const rows = [];
-    rows.push(headers.join(','));
-
-    data.forEach(msg => {
-        rows.push([
-            escapeCell(msg.id),
-            escapeCell(msg.phone_number),
-            escapeCell(msg.message),
-            escapeCell(msg.scheduled_at),
-            escapeCell(msg.status),
-            escapeCell(msg.repeat_interval),
-            escapeCell(msg.created_at),
-            escapeCell(msg.updated_at)
-        ].join(','));
+    const dateStr = now.toLocaleDateString('id-ID', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
     });
 
-    const csvContent = rows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const periodLabel = period === 'daily' 
+        ? 'Harian (Hari Ini)'
+        : period === 'weekly'
+        ? 'Mingguan (7 Hari Terakhir)'
+        : 'Bulanan (30 Hari Terakhir)';
 
-    const dateLabel = now.toISOString().slice(0, 10);
-    const filename = 'scheduled_messages_' + period + '_' + dateLabel + '.csv';
+    let rowsHtml = '';
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    data.forEach((msg, index) => {
+        const dateObj = new Date(msg.scheduled_at);
+        const dateStrLocal = dateObj.toLocaleString('id-ID', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const statusLabel = msg.status === 'pending' 
+            ? 'Pending' 
+            : msg.status === 'sent'
+            ? 'Terkirim'
+            : 'Gagal';
+
+        const repeatLabel = msg.repeat_interval && msg.repeat_interval !== 'none'
+            ? msg.repeat_interval
+            : '-';
+
+        rowsHtml += `
+            <tr>
+                <td style="text-align:center">${index + 1}</td>
+                <td>${msg.phone_number}</td>
+                <td>${msg.message}</td>
+                <td>${dateStrLocal}</td>
+                <td>${statusLabel}</td>
+                <td>${repeatLabel}</td>
+            </tr>
+        `;
+    });
+
+    printArea.innerHTML = `
+        <div class="print-header">
+            <h1>Laporan Pesan Terjadwal (${periodLabel})</h1>
+            <p class="print-date">
+                Dicetak pada: ${dateStr}
+            </p>
+        </div>
+        <table class="print-table">
+            <thead>
+                <tr>
+                    <th style="width:5%">No</th>
+                    <th style="width:15%">Nomor</th>
+                    <th style="width:40%">Pesan</th>
+                    <th style="width:20%">Jadwal</th>
+                    <th style="width:10%">Status</th>
+                    <th style="width:10%">Repeat</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    `;
+
+    window.print();
 }
 
 // Expose delete function to window

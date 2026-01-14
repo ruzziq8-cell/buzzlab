@@ -61,6 +61,12 @@
                         <button class="filter-btn" data-filter="active">Aktif</button>
                         <button class="filter-btn" data-filter="completed">Selesai</button>
                     </div>
+
+                    <div class="status-filters" style="margin-top: 0.5rem;">
+                        <button type="button" id="export-tasks-daily" class="filter-btn" style="font-size: 0.8rem;">📄 Export Harian</button>
+                        <button type="button" id="export-tasks-weekly" class="filter-btn" style="font-size: 0.8rem;">📄 Export Mingguan</button>
+                        <button type="button" id="export-tasks-monthly" class="filter-btn" style="font-size: 0.8rem;">📄 Export Bulanan</button>
+                    </div>
                 </div>
 
                 <!-- List -->
@@ -162,7 +168,7 @@
     <!-- Print Area -->
     <div id="print-area" class="print-only"></div>
 
-    <script src="js/supabase.js"></script>
+    <script src="js/supabase.js?v=3"></script>
     <!-- WhatsApp Settings Modal -->
     <div id="wa-modal" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content">
@@ -182,6 +188,6 @@
         </div>
     </div>
 
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=3"></script>
 </body>
 </html>

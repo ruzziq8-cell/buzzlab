@@ -1,11 +1,12 @@
 require('dotenv').config();
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const http = require('http');
 const { processWithAI } = require('./ai_service');
 const { checkScheduledMessages } = require('./scheduler_service');
+const PDFDocument = require('pdfkit');
 
 console.log('Bot Version: 3.0 (AI Enabled)');
 
@@ -66,26 +67,22 @@ const startServer = (attemptPort) => {
 const initialPort = process.env.PORT || 8080;
 startServer(initialPort);
 
-// Config
 const SUPABASE_URL = 'https://pyawabcoppwaaaewpkny.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable__MNgyCgZ98xSGsWc4z1lHg_zVKdyZZc';
 
-// State Management (In-memory for demo)
-// Map<phoneNumber, { access_token, user }>
 const sessions = new Map();
-// Anti-Spam / Anti-Loop Guard: Map<senderId, lastTimestamp>
 const lastRequestTime = new Map();
-// Chat History Context: Map<senderId, Array<{role, content}>>
 const chatHistory = new Map();
 
-// Client Initialization
 const client = new Client({
     authStrategy: new LocalAuth({ clientId: 'buzzlab_bot_v2' }),
     puppeteer: puppeteerConfig,
-    // HAPUS webVersionCache untuk memaksa versi default yang mungkin lebih kompatibel
+    webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
+    }
 });
 
-// Helper: Get Supabase Client for User
 const getUserSupabase = (accessToken) => {
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: {
@@ -96,10 +93,64 @@ const getUserSupabase = (accessToken) => {
     });
 };
 
-// Main Supabase (for auth only)
 const authSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Reminder Logic
+const generateTasksPdf = (tasks, title, subtitle) => {
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument({ margin: 40 });
+        const chunks = [];
+        doc.on('data', chunk => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', reject);
+        doc.fontSize(18).text(title, { align: 'center' });
+        doc.moveDown(0.5);
+        if (subtitle) {
+            doc.fontSize(12).text(subtitle, { align: 'center' });
+            doc.moveDown();
+        }
+        if (!tasks || tasks.length === 0) {
+            doc.fontSize(12).text('Tidak ada tugas untuk periode ini.');
+        } else {
+            tasks.forEach((task, index) => {
+                const lineNumber = index + 1;
+                const titleText = task.title || '(Tanpa judul)';
+                let dueText = '';
+                if (task.due_date) {
+                    try {
+                        const d = new Date(task.due_date);
+                        dueText = d.toLocaleString('id-ID', {
+                            timeZone: 'Asia/Jakarta',
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }).replace('.', ':');
+                    } catch (e) {
+                        dueText = task.due_date;
+                    }
+                }
+                const priorityText = task.priority || 'medium';
+                const statusText = task.status || 'active';
+                let header = `${lineNumber}. ${titleText}`;
+                doc.fontSize(13).text(header);
+                const metaParts = [];
+                if (dueText) metaParts.push(`Tenggat: ${dueText}`);
+                if (priorityText) metaParts.push(`Prioritas: ${priorityText}`);
+                if (statusText) metaParts.push(`Status: ${statusText}`);
+                if (metaParts.length > 0) {
+                    doc.fontSize(11).text(metaParts.join(' | '));
+                }
+                if (task.description) {
+                    doc.fontSize(11).text(task.description);
+                }
+                doc.moveDown(0.75);
+            });
+        }
+        doc.end();
+    });
+};
+
 const checkReminders = async () => {
     // Pastikan client sudah siap (sudah scan QR dan login)
     if (!client.info) return;
@@ -537,7 +588,6 @@ client.on('message_create', async msg => {
         }
     }
 
-    // Auth Guard for other commands
     else if (['!list', '!done'].some(cmd => text.startsWith(cmd))) {
         const session = sessions.get(sender);
         if (!session) {
@@ -605,9 +655,120 @@ client.on('message_create', async msg => {
         }
     }
 
-    // ---------------------------------------------------------
-    // AI HANDLER (Untuk chat & perintah natural language)
-    // ---------------------------------------------------------
+    else if (text.toLowerCase().includes('export tugas') || text.startsWith('!export')) {
+        const lower = text.toLowerCase();
+        let period = 'daily';
+        let label = 'Harian (Hari Ini)';
+        if (lower.includes('minggu') || lower.includes('mingguan') || lower.includes('minggu ini')) {
+            period = 'weekly';
+            label = 'Mingguan';
+        } else if (lower.includes('bulan') || lower.includes('bulanan') || lower.includes('bulan ini')) {
+            period = 'monthly';
+            label = 'Bulanan';
+        }
+        if (text.startsWith('!export')) {
+            const parts = lower.split(' ');
+            if (parts[1] === 'minggu' || parts[1] === 'mingguan' || parts[1] === 'week') {
+                period = 'weekly';
+                label = 'Mingguan';
+            } else if (parts[1] === 'bulan' || parts[1] === 'bulanan' || parts[1] === 'month') {
+                period = 'monthly';
+                label = 'Bulanan';
+            } else if (parts[1] === 'hari' || parts[1] === 'harian' || parts[1] === 'day') {
+                period = 'daily';
+                label = 'Harian (Hari Ini)';
+            }
+        }
+        const senderNumber = sender.replace('@c.us', '');
+        const formats = [
+            senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`,
+            senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber
+        ];
+        let userProfile = null;
+        let { data: profile } = await authSupabase
+            .from('profiles')
+            .select('id')
+            .eq('whatsapp_number', formats[0])
+            .single();
+        if (profile) {
+            userProfile = profile;
+        } else {
+            let { data: profile2 } = await authSupabase
+                .from('profiles')
+                .select('id')
+                .eq('whatsapp_number', formats[1])
+                .single();
+            userProfile = profile2;
+        }
+        if (!userProfile && senderNumber.startsWith('62')) {
+            const localFormat = '0' + senderNumber.substring(2);
+            let { data: profile3 } = await authSupabase
+                .from('profiles')
+                .select('id')
+                .eq('whatsapp_number', localFormat)
+                .single();
+            if (profile3) userProfile = profile3;
+        }
+        if (!userProfile) {
+            await msg.reply('⚠️ Nomor Anda tidak terdaftar dalam sistem. Pastikan sudah mengisi nomor WhatsApp di BuzzLab.');
+            return;
+        }
+        const now = new Date();
+        const start = new Date(now);
+        const end = new Date(now);
+        if (period === 'daily') {
+            start.setHours(0, 0, 0, 0);
+            end.setHours(23, 59, 59, 999);
+        } else if (period === 'weekly') {
+            start.setDate(start.getDate() - 7);
+        } else if (period === 'monthly') {
+            start.setMonth(start.getMonth() - 1);
+        }
+        const { data: tasks, error } = await authSupabase
+            .from('tasks')
+            .select('*')
+            .eq('user_id', userProfile.id)
+            .order('created_at', { ascending: false });
+        if (error) {
+            await msg.reply('❌ Gagal mengambil data tugas untuk export.');
+            return;
+        }
+        const tasksFiltered = (tasks || []).filter(t => {
+            if (!t.due_date) return false;
+            const d = new Date(t.due_date);
+            return d >= start && d <= end;
+        });
+        if (!tasksFiltered.length) {
+            await msg.reply('ℹ️ Tidak ada tugas untuk periode ini.');
+            return;
+        }
+        const dateStr = now.toLocaleDateString('id-ID', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+        const title = `Laporan Tugas ${label}`;
+        const subtitle = `Dicetak pada ${dateStr}`;
+        try {
+            const pdfBuffer = await generateTasksPdf(tasksFiltered, title, subtitle);
+            const base64 = pdfBuffer.toString('base64');
+            const fileName =
+                period === 'daily'
+                    ? 'tugas_hari_ini.pdf'
+                    : period === 'weekly'
+                    ? 'tugas_minggu_ini.pdf'
+                    : 'tugas_bulan_ini.pdf';
+            const media = new MessageMedia('application/pdf', base64, fileName);
+            await client.sendMessage(sender, media, {
+                caption: `${title}`
+            });
+        } catch (e) {
+            console.error('Error generating or sending PDF:', e);
+            await msg.reply('❌ Terjadi kesalahan saat membuat file PDF.');
+        }
+    }
+
     else {
         // SAFETY GUARD: Matikan AI untuk pesan dari diri sendiri (Loop Prevention)
         // Jika true, berarti pesan ini dikirim oleh BOT (atau user di Note to Self).

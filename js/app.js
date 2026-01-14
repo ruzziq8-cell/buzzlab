@@ -434,8 +434,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const today = new Date();
-        const todayStr = DateUtils.getLocalYMD(today);
+        const now = new Date();
+        const todayStr = DateUtils.getLocalYMD(now);
         const todayTime = DateUtils.parseLocal(todayStr);
 
         const filtered = tasks.filter(task => {
@@ -467,21 +467,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         const printArea = document.getElementById('print-area');
         if (!printArea) return;
 
-        const dateStr = new Date().toLocaleDateString('id-ID', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+        const dateStr = now.toLocaleDateString('id-ID', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
         });
         const userName = currentUser.user_metadata?.name || currentUser.email;
 
-        const periodLabel = period === 'daily' 
+        const periodLabel = period === 'daily'
             ? 'Harian (Hari Ini)'
             : period === 'weekly'
             ? 'Mingguan (7 Hari Ke Depan)'
             : 'Bulanan (Bulan Ini)';
-
-        let tableRows = '';
 
         const sortedTasks = [...filtered].sort((a, b) => {
             if (!a.due_date) return 1;
@@ -493,15 +491,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         const completedTasks = sortedTasks.filter(t => t.status === 'completed').length;
         const activeTasks = sortedTasks.filter(t => t.status === 'active').length;
 
-        const todayStrLocal = DateUtils.getLocalYMD(new Date());
+        const todayStrLocal = DateUtils.getLocalYMD(now);
         const overdueTasks = sortedTasks.filter(t => {
             if (t.status === 'completed' || !t.due_date) return false;
             return t.due_date < todayStrLocal;
         }).length;
 
-        const completionRate = totalTasks > 0 
-            ? Math.round((completedTasks / totalTasks) * 100) 
+        const completionRate = totalTasks > 0
+            ? Math.round((completedTasks / totalTasks) * 100)
             : 0;
+
+        let tableRows = '';
 
         if (sortedTasks.length === 0) {
             tableRows = '<tr><td colspan="6" style="text-align:center">Tidak ada tugas.</td></tr>';
@@ -511,17 +511,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const priorityClass = `priority-${task.priority}`;
                 const dueDate = task.due_date ? new Date(task.due_date).toLocaleDateString('id-ID') : '-';
                 const statusLabel = task.status === 'active' ? 'Aktif' : 'Selesai';
-                
+
                 const isOverdue = task.status === 'active' && task.due_date && task.due_date < todayStrLocal;
                 const dateStyle = isOverdue ? 'color: var(--danger-color); font-weight: bold;' : '';
                 const dateDisplay = isOverdue ? `${dueDate} (Terlambat)` : dueDate;
-                
+
                 let completedAtDisplay = '-';
                 if (task.status === 'completed') {
                     if (task.completed_at) {
                         const doneDate = new Date(task.completed_at);
                         completedAtDisplay = doneDate.toLocaleDateString('id-ID', {
-                             day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                            day: 'numeric',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
                         });
                     } else {
                         completedAtDisplay = '<span style="color: #999; font-style: italic;">(Tak tercatat)</span>';

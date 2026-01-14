@@ -1084,8 +1084,18 @@ client.on('message', async msg => {
             }
         }
 
-        // Kirim balasan final (Teks AI + Status Aksi)
-        if (finalReply) await client.sendMessage(sender, finalReply);
+        if (finalReply) {
+            try {
+                await client.sendMessage(sender, finalReply);
+            } catch (e) {
+                const msgText = (e && e.message) ? e.message : String(e);
+                if (msgText.includes('markedUnread') || msgText.includes('sendSeen')) {
+                    console.warn('WhatsApp Web internal bug (markedUnread/sendSeen) diabaikan saat kirim balasan AI.');
+                } else {
+                    console.error('Error sending AI reply:', e);
+                }
+            }
+        }
     }
 });
 

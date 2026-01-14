@@ -305,8 +305,7 @@ client.on('ready', () => {
     }, 60000);
 });
 
-// Gunakan message_create agar bisa merespon pesan dari diri sendiri (Note to Self)
-client.on('message_create', async msg => {
+client.on('message', async msg => {
     // Abaikan pesan dari status broadcast
     if (msg.from === 'status@broadcast') return;
 
@@ -764,8 +763,13 @@ client.on('message_create', async msg => {
                 caption: `${title}`
             });
         } catch (e) {
-            console.error('Error generating or sending PDF:', e);
-            await msg.reply('❌ Terjadi kesalahan saat membuat file PDF.');
+            const msgText = (e && e.message) ? e.message : String(e);
+            if (msgText.includes('markedUnread') || msgText.includes('sendSeen')) {
+                console.warn('WhatsApp Web internal bug (markedUnread/sendSeen) diabaikan saat kirim PDF.');
+            } else {
+                console.error('Error generating or sending PDF:', e);
+                await msg.reply('❌ Terjadi kesalahan saat membuat file PDF.');
+            }
         }
     }
 

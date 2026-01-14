@@ -8,6 +8,8 @@ const { processWithAI } = require('./ai_service');
 const { checkScheduledMessages } = require('./scheduler_service');
 const PDFDocument = require('pdfkit');
 
+const EMPTY_EXPORT_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAQklEQVR4Xu3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4G0BNwABYB1K3AAAAABJRU5ErkJggg==';
+
 console.log('Bot Version: 3.0 (AI Enabled)');
 
 // Setup Puppeteer for Termux/Linux vs Windows
@@ -294,12 +296,27 @@ client.on('qr', (qr) => {
     qrcode.generate(qr, { small: true });
 });
 
-client.on('ready', () => {
+client.on('ready', async () => {
     console.log('✅ Client is ready!');
+
+    try {
+        const page = client.pupPage || client._page;
+        if (page) {
+            await page.evaluate(() => {
+                if (window && window.WWebJS && typeof window.WWebJS.sendSeen === 'function') {
+                    window.WWebJS.sendSeen = async () => {};
+                }
+            });
+            console.log('🔧 Patched WWebJS.sendSeen to no-op to avoid markedUnread bug');
+        } else {
+            console.warn('Cannot access Puppeteer page to patch sendSeen');
+        }
+    } catch (e) {
+        console.warn('Failed to patch sendSeen:', e.message);
+    }
     
-    // Start Scheduler (Check every 60 seconds)
     console.log('⏰ Starting Scheduler Service...');
-    checkScheduledMessages(client); // Run immediately
+    checkScheduledMessages(client);
     setInterval(() => {
         checkScheduledMessages(client);
     }, 60000);
@@ -748,27 +765,44 @@ client.on('message', async msg => {
             day: 'numeric'
         });
         const title = `Laporan Tugas ${label}`;
-        const subtitle = `Dicetak pada ${dateStr}`;
+        const header = `📄 ${title}\nDicetak pada ${dateStr}\nTotal: ${tasksFiltered.length} tugas\n`;
+        const detailLines = tasksFiltered.map((t, i) => {
+            let dStr = '';
+            if (t.due_date) {
+                try {
+                    dStr = new Date(t.due_date).toLocaleString('id-ID', {
+                        timeZone: 'Asia/Jakarta',
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    }).replace('.', ':');
+                } catch (e) {
+                    dStr = t.due_date;
+                }
+            }
+            const priority = t.priority || 'medium';
+            const status = t.status || 'active';
+            const dateInfo = dStr ? ` | 📅 ${dStr}` : '';
+            return `${i + 1}. ${t.title} [${priority}/${status}]${dateInfo}`;
+        });
+        const caption = `${header}\n${detailLines.join('\n')}`;
+        const fileName =
+            period === 'daily'
+                ? 'tugas_hari_ini.png'
+                : period === 'weekly'
+                ? 'tugas_minggu_ini.png'
+                : 'tugas_bulan_ini.png';
         try {
-            const pdfBuffer = await generateTasksPdf(tasksFiltered, title, subtitle);
-            const base64 = pdfBuffer.toString('base64');
-            const fileName =
-                period === 'daily'
-                    ? 'tugas_hari_ini.pdf'
-                    : period === 'weekly'
-                    ? 'tugas_minggu_ini.pdf'
-                    : 'tugas_bulan_ini.pdf';
-            const media = new MessageMedia('application/pdf', base64, fileName);
-            await client.sendMessage(sender, media, {
-                caption: `${title}`
-            });
+            const media = new MessageMedia('image/png', EMPTY_EXPORT_IMAGE_BASE64, fileName);
+            await client.sendMessage(sender, media, { caption });
         } catch (e) {
             const msgText = (e && e.message) ? e.message : String(e);
             if (msgText.includes('markedUnread') || msgText.includes('sendSeen')) {
-                console.warn('WhatsApp Web internal bug (markedUnread/sendSeen) diabaikan saat kirim PDF.');
+                console.warn('WhatsApp Web internal bug (markedUnread/sendSeen) diabaikan saat kirim foto export.');
             } else {
-                console.error('Error generating or sending PDF:', e);
-                await msg.reply('❌ Terjadi kesalahan saat membuat file PDF.');
+                console.error('Error sending export image:', e);
+                await msg.reply('❌ Terjadi kesalahan saat mengirim export tugas.');
             }
         }
     }

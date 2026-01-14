@@ -127,9 +127,13 @@
                 </form>
             </div>
 
-            <!-- List Pesan -->
             <div class="card">
                 <h2>⏳ Antrian Pesan</h2>
+                <div style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 8px;">
+                    <button type="button" id="export-daily" class="btn-small btn-secondary">📄 Export Harian</button>
+                    <button type="button" id="export-weekly" class="btn-small btn-secondary">📄 Export Mingguan</button>
+                    <button type="button" id="export-monthly" class="btn-small btn-secondary">📄 Export Bulanan</button>
+                </div>
                 <div id="loading-list" style="text-align: center; display: none;">Memuat...</div>
                 <ul id="message-list" class="message-list">
                     <!-- Items injected via JS -->

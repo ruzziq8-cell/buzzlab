@@ -1,11 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Check auth
     checkAuth();
 
-    // Event listeners
     const form = document.getElementById('schedule-form');
     if (form) {
         form.addEventListener('submit', handleSchedule);
+    }
+
+    const exportDaily = document.getElementById('export-daily');
+    const exportWeekly = document.getElementById('export-weekly');
+    const exportMonthly = document.getElementById('export-monthly');
+
+    if (exportDaily) {
+        exportDaily.addEventListener('click', () => exportMessages('daily'));
+    }
+    if (exportWeekly) {
+        exportWeekly.addEventListener('click', () => exportMessages('weekly'));
+    }
+    if (exportMonthly) {
+        exportMonthly.addEventListener('click', () => exportMessages('monthly'));
     }
 });
 
@@ -103,12 +115,9 @@ async function handleSchedule(e) {
         return;
     }
 
-    // Get user
     const { data: { user } } = await window.supabaseClient.auth.getUser();
 
-    // Clean phone number (remove +, -, space)
     let cleanPhone = phone.replace(/[^0-9]/g, '');
-    // Auto-fix 08... to 628...
     if (cleanPhone.startsWith('08')) {
         cleanPhone = '62' + cleanPhone.substring(1);
     }
@@ -132,6 +141,85 @@ async function handleSchedule(e) {
         document.getElementById('schedule-form').reset();
         loadMessages();
     }
+}
+
+async function exportMessages(period) {
+    const now = new Date();
+    const to = new Date(now);
+    const from = new Date(now);
+
+    if (period === 'daily') {
+        from.setHours(0, 0, 0, 0);
+        to.setHours(23, 59, 59, 999);
+    } else if (period === 'weekly') {
+        from.setDate(from.getDate() - 7);
+    } else if (period === 'monthly') {
+        from.setMonth(from.getMonth() - 1);
+    }
+
+    const { data, error } = await window.supabaseClient
+        .from('scheduled_messages')
+        .select('*')
+        .gte('scheduled_at', from.toISOString())
+        .lte('scheduled_at', to.toISOString())
+        .order('scheduled_at', { ascending: true });
+
+    if (error) {
+        alert('❌ Gagal export: ' + error.message);
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        alert('ℹ️ Tidak ada data untuk periode ini.');
+        return;
+    }
+
+    const headers = [
+        'id',
+        'phone_number',
+        'message',
+        'scheduled_at',
+        'status',
+        'repeat_interval',
+        'created_at',
+        'updated_at'
+    ];
+
+    const escapeCell = (value) => {
+        const str = value == null ? '' : String(value);
+        return '"' + str.replace(/"/g, '""') + '"';
+    };
+
+    const rows = [];
+    rows.push(headers.join(','));
+
+    data.forEach(msg => {
+        rows.push([
+            escapeCell(msg.id),
+            escapeCell(msg.phone_number),
+            escapeCell(msg.message),
+            escapeCell(msg.scheduled_at),
+            escapeCell(msg.status),
+            escapeCell(msg.repeat_interval),
+            escapeCell(msg.created_at),
+            escapeCell(msg.updated_at)
+        ].join(','));
+    });
+
+    const csvContent = rows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const dateLabel = now.toISOString().slice(0, 10);
+    const filename = 'scheduled_messages_' + period + '_' + dateLabel + '.csv';
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }
 
 // Expose delete function to window

@@ -937,40 +937,51 @@ client.on('message', async msg => {
                 label = 'Harian (Hari Ini)';
             }
         }
-        const senderNumber = sender.replace('@c.us', '');
-        const formats = [
-            senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`,
-            senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber
-        ];
+
         let userProfile = null;
-        let { data: profile } = await authSupabase
-            .from('profiles')
-            .select('id')
-            .eq('whatsapp_number', formats[0])
-            .single();
-        if (profile) {
-            userProfile = profile;
+        let tasksClient = null;
+
+        const session = sessions.get(sender);
+        if (session && session.user && session.access_token) {
+            userProfile = { id: session.user.id };
+            tasksClient = getUserSupabase(session.access_token);
         } else {
-            let { data: profile2 } = await authSupabase
+            const senderNumber = sender.replace('@c.us', '');
+            const formats = [
+                senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`,
+                senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber
+            ];
+            let { data: profile } = await authSupabase
                 .from('profiles')
                 .select('id')
-                .eq('whatsapp_number', formats[1])
+                .eq('whatsapp_number', formats[0])
                 .single();
-            userProfile = profile2;
+            if (profile) {
+                userProfile = profile;
+            } else {
+                let { data: profile2 } = await authSupabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('whatsapp_number', formats[1])
+                    .single();
+                userProfile = profile2;
+            }
+            if (!userProfile && senderNumber.startsWith('62')) {
+                const localFormat = '0' + senderNumber.substring(2);
+                let { data: profile3 } = await authSupabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('whatsapp_number', localFormat)
+                    .single();
+                if (profile3) userProfile = profile3;
+            }
+            if (!userProfile) {
+                await msg.reply('⚠️ Nomor Anda tidak terdaftar dalam sistem. Pastikan sudah mengisi nomor WhatsApp di BuzzLab.');
+                return;
+            }
+            tasksClient = authSupabase;
         }
-        if (!userProfile && senderNumber.startsWith('62')) {
-            const localFormat = '0' + senderNumber.substring(2);
-            let { data: profile3 } = await authSupabase
-                .from('profiles')
-                .select('id')
-                .eq('whatsapp_number', localFormat)
-                .single();
-            if (profile3) userProfile = profile3;
-        }
-        if (!userProfile) {
-            await msg.reply('⚠️ Nomor Anda tidak terdaftar dalam sistem. Pastikan sudah mengisi nomor WhatsApp di BuzzLab.');
-            return;
-        }
+
         const now = new Date();
         const start = new Date(now);
         const end = new Date(now);
@@ -982,7 +993,7 @@ client.on('message', async msg => {
         } else if (period === 'monthly') {
             start.setMonth(start.getMonth() - 1);
         }
-        const { data: tasks, error } = await authSupabase
+        const { data: tasks, error } = await tasksClient
             .from('tasks')
             .select('*')
             .eq('user_id', userProfile.id)

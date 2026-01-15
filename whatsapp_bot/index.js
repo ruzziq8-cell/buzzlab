@@ -1061,23 +1061,21 @@ client.on('message', async msg => {
         let userProfile = null;
         let tasks = [];
         let isManualLogin = false;
+        let userClient = null;
 
         // PRIORITAS 1: Cek apakah user sudah login manual via !login
         const session = sessions.get(sender);
         if (session && session.user) {
-            userProfile = session.user; // Pakai data user dari sesi login
+            userProfile = session.user;
             isManualLogin = true;
-            
-            // Ambil tugas menggunakan token user (Pasti berhasil, bypass RLS)
             try {
-                const userClient = getUserSupabase(session.access_token);
+                userClient = getUserSupabase(session.access_token);
                 const { data: t, error } = await userClient
                     .from('tasks')
                     .select('*')
                     .eq('status', 'active')
                     .order('created_at', { ascending: false })
                     .limit(10);
-                
                 if (!error && t) tasks = t;
             } catch (err) {
                 console.error('Error fetching tasks via session:', err.message);
@@ -1215,24 +1213,49 @@ client.on('message', async msg => {
                         console.log('[DEBUG AI] Fixed DueDate (WIB):', fixedDueDate);
                     }
 
-                    const { data: insertedData, error } = await authSupabase.from('tasks').insert([{
-                        user_id: userProfile.id,
-                        title: title || 'Tugas Baru',
-                        priority: priority || 'medium',
-                        due_date: fixedDueDate || null,
-                        reminder_interval: reminder_interval || null,
-                        status: 'active'
-                    }]).select(); // Tambahkan .select() untuk melihat hasil simpan
+                    let savedTask = null;
+                    let saveError = null;
 
-                    if (!error) {
-                        // Cek apa yang sebenarnya tersimpan di DB
-                        const savedTask = insertedData && insertedData[0];
-                        // console.log('[DEBUG SAVE] Saved Task DueDate:', savedTask ? savedTask.due_date : 'No Data');
+                    if (isManualLogin && userClient && session && session.user) {
+                        const { data: insertedData, error } = await userClient
+                            .from('tasks')
+                            .insert([{
+                                user_id: session.user.id,
+                                title: title || 'Tugas Baru',
+                                priority: priority || 'medium',
+                                due_date: fixedDueDate || null,
+                                reminder_interval: reminder_interval || null,
+                                status: 'active'
+                            }])
+                            .select();
+                        if (!error && insertedData && insertedData[0]) {
+                            savedTask = insertedData[0];
+                        } else {
+                            saveError = error;
+                        }
+                    } else {
+                        const senderNumber = sender.replace('@c.us', '');
+                        const formattedNumber = senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`;
+                        const { data: rpcResult, error: rpcError } = await authSupabase.rpc('create_task_from_bot', {
+                            p_whatsapp_number: formattedNumber,
+                            p_title: title || 'Tugas Baru',
+                            p_due_date: fixedDueDate,
+                            p_interval: reminder_interval || 0
+                        });
+                        if (!rpcError && rpcResult && rpcResult.success) {
+                            savedTask = { 
+                                id: rpcResult.task_id, 
+                                title: title || 'Tugas Baru', 
+                                due_date: fixedDueDate 
+                            };
+                        } else {
+                            saveError = rpcError || new Error(rpcResult?.message || 'RPC create_task_from_bot failed');
+                        }
+                    }
 
+                    if (!saveError) {
                         let dateInfo = '';
-                        // Gunakan data dari DB jika ada, untuk konfirmasi akurat
                         const finalDate = savedTask ? savedTask.due_date : fixedDueDate;
-                        
                         if (finalDate) {
                             try {
                                 dateInfo = ' 📅 ' + new Date(finalDate).toLocaleString('id-ID', { 
@@ -1244,7 +1267,7 @@ client.on('message', async msg => {
                         finalReply = `✅ *Sukses!* Tugas "${title}" berhasil disimpan${dateInfo}`;
                         if (reminder_interval) finalReply += ` (Reminder: ${reminder_interval}m)`;
                     } else {
-                        finalReply = `❌ Gagal: ${error.message}`;
+                        finalReply = `❌ Gagal: ${saveError.message || String(saveError)}`;
                     }
                 }
 

@@ -20,7 +20,13 @@ const GEMINI_KEYS = [
     process.env.GEMINI_KEY_2
 ].filter(Boolean);
 
-const COHERE_KEY = process.env.COHERE_API_KEY;
+const COHERE_KEYS = [
+    process.env.COHERE_API_KEY,
+    process.env.COHERE_KEY_1,
+    process.env.COHERE_KEY_2,
+    process.env.COHERE_KEY_3,
+    process.env.COHERE_KEY_4
+].filter(Boolean);
 const HF_TOKEN = process.env.HF_TOKEN;
 const OPENROUTER_KEYS = [
     process.env.OPENROUTER_KEY_1,
@@ -43,7 +49,8 @@ function getGeminiKey() {
 }
 
 function getCohereKey() {
-    return COHERE_KEY;
+    if (COHERE_KEYS.length === 0) return null;
+    return COHERE_KEYS[Math.floor(Math.random() * COHERE_KEYS.length)];
 }
 
 function getHuggingFaceKey() {

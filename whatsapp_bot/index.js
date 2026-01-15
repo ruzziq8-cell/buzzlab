@@ -409,32 +409,42 @@ const checkReminders = async () => {
     const now = new Date();
 
     for (const task of reminders) {
-        // ... (interval calculation logic) ...
         const lastReminded = task.last_reminded_at ? new Date(task.last_reminded_at) : null;
-        let intervalMs;
-        
-        // Interval dalam menit (Bebas, sesuai input user)
-        // Default ke 60 menit jika null/0
         const intervalMinutes = task.reminder_interval && task.reminder_interval > 0 ? task.reminder_interval : 60;
-        intervalMs = intervalMinutes * 60 * 1000;
+        const intervalMs = intervalMinutes * 60 * 1000;
 
-        // LOGIKA WAKTU
-            const created = new Date(task.created_at);
-            const timeDiff = lastReminded ? (now - lastReminded) : (now - created);
-            
-            let shouldRemind = false;
-            
-            if (!lastReminded) {
-                if (now - created >= intervalMs) {
-                    shouldRemind = true;
-                }
-            } else {
-                if (now - lastReminded >= intervalMs) {
-                    shouldRemind = true;
-                }
+        let shouldRemind = false;
+
+        const hasDueDate = task.due_date != null;
+        let dueDate = null;
+        if (hasDueDate) {
+            const parsed = new Date(task.due_date);
+            if (!isNaN(parsed.getTime())) {
+                dueDate = parsed;
+            }
+        }
+
+        if (dueDate) {
+            const leadMs = 5 * 60 * 1000;
+            const reminderStart = new Date(dueDate.getTime() - leadMs);
+
+            if (now < reminderStart) {
+                continue;
             }
 
-            if (shouldRemind) {
+            const baseTime = lastReminded || reminderStart;
+            if (now - baseTime >= intervalMs) {
+                shouldRemind = true;
+            }
+        } else {
+            const created = new Date(task.created_at);
+            const baseTime = lastReminded || created;
+            if (now - baseTime >= intervalMs) {
+                shouldRemind = true;
+            }
+        }
+
+        if (shouldRemind) {
                 let phoneNumber = task.whatsapp_number;
                 
                 // NORMALISASI NOMOR WA

@@ -78,16 +78,8 @@ const chatHistory = new Map();
 const cleanupChromeSingletonLock = () => {
     const baseDir = path.join(__dirname, '.wwebjs_auth', 'session-buzzlab_bot_v2');
     try {
-        if (!fs.existsSync(baseDir)) return;
-        const files = fs.readdirSync(baseDir);
-        for (const name of files) {
-            if (!name.startsWith('Singleton')) continue;
-            const fullPath = `${baseDir}/${name}`;
-            try {
-                fs.unlinkSync(fullPath);
-            } catch (e) {
-                console.warn('Failed to remove Chrome lock file:', fullPath, e.message);
-            }
+        if (fs.existsSync(baseDir)) {
+            fs.rmSync(baseDir, { recursive: true, force: true });
         }
     } catch (e) {
         console.warn('Error during Chrome SingletonLock cleanup:', e.message);

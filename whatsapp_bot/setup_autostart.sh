@@ -16,10 +16,16 @@ echo "[+] Membuat script boot..."
 # Buat script start_bot.sh di folder boot
 cat > "$HOME/.termux/boot/start_bot.sh" << 'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
+
 termux-wake-lock
 sshd
-cd ~/storage/downloads/todolist/whatsapp_bot
-pm2 start ecosystem.config.js --env production
+
+cd ~/buzzlab/whatsapp_bot
+
+if command -v pm2 >/dev/null 2>&1; then
+  pm2 resurrect || pm2 start index.js --name buzzlab --max-memory-restart 500M --time
+  pm2 save
+fi
 EOF
 
 chmod +x "$HOME/.termux/boot/start_bot.sh"

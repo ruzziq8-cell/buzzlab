@@ -61,7 +61,7 @@ function getMistralKey() {
 }
 
 async function processWithAI(userMessage, context = "", history = []) {
-    // Prompt SUPER RINGKAS (Hemat Token Groq Limit 6000 TPM)
+    if (!Array.isArray(history)) history = [];
     const baseSystemPrompt = `Lo adalah 'BuzzLab Bestie', asisten pribadi yang FRONTAL, CEPLAS-CEPLOS, dan SUPER GAUL.
 Gaya bicara: Pake 'Lo/Gue', panggil user 'Bos', 'Coy', atau 'Gan'. WAJIB SLENGEAN dan KOCAK.
 Anggap user itu sohib kentel lo dari kecil, jadi GAK USAH SOPAN-SOPAN AMAT. 

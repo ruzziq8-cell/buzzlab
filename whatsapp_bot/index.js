@@ -1150,9 +1150,36 @@ client.on('message', async msg => {
             }
         }
 
-        // Generate AI Response
-        const reply = await processWithAI(text, sender, userProfile, tasks);
-        await msg.reply(reply);
+        let context = '';
+        if (tasks && tasks.length > 0) {
+            context = tasks
+                .map((t, idx) => {
+                    const num = idx + 1;
+                    const title = t.title || '-';
+                    const priority = t.priority || 'medium';
+                    const status = t.status || 'active';
+                    const due = t.due_date ? new Date(t.due_date).toLocaleString('id-ID', {
+                        timeZone: 'Asia/Jakarta',
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    }).replace(/\./g, ':') : '-';
+                    return `${num}. [${priority}] ${title} | status=${status} | due=${due}`;
+                })
+                .join('\n');
+        }
+        const history = chatHistory.get(sender) || [];
+        const aiResult = await processWithAI(text, context, history);
+        const replyText = typeof aiResult === 'string' ? aiResult : aiResult && aiResult.text ? aiResult.text : '';
+        if (replyText && replyText.length > 0) {
+            await msg.reply(replyText);
+            const newHistory = history.slice(-18);
+            newHistory.push({ role: 'user', content: text });
+            newHistory.push({ role: 'assistant', content: replyText });
+            chatHistory.set(sender, newHistory);
+        }
     }
 });
 

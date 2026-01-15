@@ -83,7 +83,7 @@ BEGIN
   JOIN public.profiles p ON t.user_id = p.id
   WHERE 
     t.status = 'active' 
-    AND t.reminder_interval > 0
+    AND (t.reminder_interval > 0 OR t.due_date IS NOT NULL)
     AND p.whatsapp_number IS NOT NULL
     AND p.is_reminder_enabled = true;
 END;

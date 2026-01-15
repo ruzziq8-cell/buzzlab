@@ -389,15 +389,12 @@ const checkReminders = async () => {
     // Pastikan client sudah siap (sudah scan QR dan login)
     if (!client.info) return;
 
-    // console.log('Checking for reminders via RPC...'); 
-    
     // 1. Panggil RPC get_due_reminders
     const { data: reminders, error } = await authSupabase.rpc('get_due_reminders');
 
     if (error) {
         // Suppress network errors (fetch failed) to avoid log spam
         if (error.message && error.message.includes('fetch failed')) {
-            // console.warn('Network glitch (checkReminders), retrying later...');
             return;
         }
         console.error('RPC Error (checkReminders):', error.message);
@@ -406,19 +403,18 @@ const checkReminders = async () => {
 
     if (!reminders || reminders.length === 0) return;
 
-    console.log(`Found ${reminders.length} tasks to remind.`);
+    // console.log(`Found ${reminders.length} tasks to check.`);
 
     const now = new Date();
 
     for (const task of reminders) {
         const lastReminded = task.last_reminded_at ? new Date(task.last_reminded_at) : null;
-        const intervalMinutes = task.reminder_interval && task.reminder_interval > 0 ? task.reminder_interval : 60;
-        const intervalMs = intervalMinutes * 60 * 1000;
-
         let shouldRemind = false;
+        let reminderType = 'custom'; // 'custom', '5min', '1min', 'recurring'
 
         const hasDueDate = task.due_date != null;
         let dueDate = null;
+        
         if (hasDueDate) {
             const parsed = new Date(task.due_date);
             if (!isNaN(parsed.getTime())) {
@@ -427,22 +423,50 @@ const checkReminders = async () => {
         }
 
         if (dueDate) {
-            const leadMs = 5 * 60 * 1000;
-            const reminderStart = new Date(dueDate.getTime() - leadMs);
+            const diffMs = dueDate.getTime() - now.getTime();
+            const diffMins = diffMs / 60000;
 
-            if (now < reminderStart) {
-                continue;
+            // 1. REMINDER 1 MENIT (Range: 0 - 1.5 menit sebelum tenggat)
+            if (diffMins > 0 && diffMins <= 1.5) {
+                // Kirim jika belum ada reminder dalam 2 menit terakhir
+                if (!lastReminded || (now.getTime() - lastReminded.getTime() > 2 * 60 * 1000)) {
+                    shouldRemind = true;
+                    reminderType = '1min';
+                }
             }
+            // 2. REMINDER 5 MENIT (Range: 4.5 - 5.5 menit sebelum tenggat)
+            else if (diffMins > 4.5 && diffMins <= 5.5) {
+                // Kirim jika belum ada reminder dalam 5 menit terakhir
+                if (!lastReminded || (now.getTime() - lastReminded.getTime() > 5 * 60 * 1000)) {
+                    shouldRemind = true;
+                    reminderType = '5min';
+                }
+            }
+            // 3. REMINDER CUSTOM INTERVAL
+            else if (task.reminder_interval && task.reminder_interval > 0) {
+                const intervalMinutes = task.reminder_interval;
+                const intervalMs = intervalMinutes * 60 * 1000;
+                const customReminderTime = new Date(dueDate.getTime() - intervalMs);
 
-            const baseTime = lastReminded || reminderStart;
-            if (now - baseTime >= intervalMs) {
-                shouldRemind = true;
+                // Jika sudah melewati waktu reminder custom
+                if (now >= customReminderTime) {
+                    // Dan belum diingatkan sejak waktu reminder itu lewat
+                    if (!lastReminded || lastReminded < customReminderTime) {
+                        shouldRemind = true;
+                        reminderType = 'custom';
+                    }
+                }
             }
         } else {
+            // TUGAS TANPA TENGGAT (Recurring/Periodic)
             const created = new Date(task.created_at);
             const baseTime = lastReminded || created;
+            const intervalMinutes = task.reminder_interval && task.reminder_interval > 0 ? task.reminder_interval : 60;
+            const intervalMs = intervalMinutes * 60 * 1000;
+
             if (now - baseTime >= intervalMs) {
                 shouldRemind = true;
+                reminderType = 'recurring';
             }
         }
 
@@ -450,10 +474,7 @@ const checkReminders = async () => {
                 let phoneNumber = task.whatsapp_number;
                 
                 // NORMALISASI NOMOR WA
-                // Hapus karakter non-digit
                 phoneNumber = phoneNumber.replace(/\D/g, '');
-                
-                // Pastikan format @c.us
                 if (!phoneNumber.endsWith('@c.us')) {
                     phoneNumber = `${phoneNumber}@c.us`;
                 }
@@ -461,24 +482,20 @@ const checkReminders = async () => {
                 // Hitung nomor urut tugas untuk user ini
                 let taskNumber = '?';
                 try {
-                    // Step 1: Dapatkan user_id dari profiles berdasarkan whatsapp_number
                     const { data: profile, error: profileError } = await authSupabase
                         .from('profiles')
                         .select('id')
                         .eq('whatsapp_number', task.whatsapp_number)
                         .single();
 
-                    if (profileError || !profile) {
-                         console.error('Debug: Could not find profile for number:', task.whatsapp_number);
-                    } else {
-                        // Step 2: Ambil semua tugas aktif milik user_id tersebut
+                    if (!profileError && profile) {
                         const { data: userTasks, error: rankError } = await authSupabase
                             .from('tasks')
                             .select('id')
-                            .eq('user_id', profile.id) // Gunakan user_id yang benar
+                            .eq('user_id', profile.id)
                             .eq('status', 'active')
                             .order('created_at', { ascending: false });
-        
+
                         if (!rankError && userTasks) {
                             const taskIndex = userTasks.findIndex(t => t.id === task.id);
                             taskNumber = taskIndex !== -1 ? taskIndex + 1 : '?';
@@ -488,9 +505,8 @@ const checkReminders = async () => {
                     console.error('Error calculating task number:', err.message);
                 }
 
-                console.log(`Sending reminder to ${phoneNumber} for "${task.title}" (Task #${taskNumber})`);
-                
-                // Format Tanggal
+                console.log(`Sending reminder (${reminderType}) to ${phoneNumber} for "${task.title}"`);
+
                 let dateStr = '-';
                 if (task.due_date) {
                     try {
@@ -498,12 +514,16 @@ const checkReminders = async () => {
                             timeZone: 'Asia/Jakarta',
                             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', 
                             hour: '2-digit', minute: '2-digit' 
-                        }).replace('.', ':'); // Fix separator jam di beberapa locale
+                        }).replace('.', ':');
                     } catch (e) { dateStr = task.due_date; }
                 }
 
-                // Siapkan Pesan Teks (Tanpa Tombol karena Deprecated)
-                const msgText = `🔔 *REMINDER TUGAS* 🔔\n\n` +
+                // Custom Header based on Reminder Type
+                let header = '🔔 *REMINDER TUGAS* 🔔';
+                if (reminderType === '5min') header = '⚠️ *TUGAS TENGGAT 5 MENIT LAGI!* ⚠️';
+                if (reminderType === '1min') header = '🚨 *TUGAS TENGGAT 1 MENIT LAGI!* 🚨';
+
+                const msgText = `${header}\n\n` +
                                 `Judul: *${task.title}*\n` +
                                 `Prioritas: ${task.priority}\n` +
                                 `Tenggat: ${dateStr}\n\n` +
@@ -1081,319 +1101,58 @@ client.on('message', async msg => {
             isManualLogin = true;
             try {
                 userClient = getUserSupabase(session.access_token);
-                const { data: t, error } = await userClient
+                // Fetch tasks for context
+                const { data: t } = await userClient
                     .from('tasks')
                     .select('*')
                     .eq('status', 'active')
                     .order('created_at', { ascending: false })
-                    .limit(10);
-                if (!error && t) tasks = t;
-            } catch (err) {
-                console.error('Error fetching tasks via session:', err.message);
-            }
-        }
-
-        // PRIORITAS 2: Jika belum login, coba cari manual by Phone Number (Public Lookup)
-        if (!userProfile) {
+                    .limit(5);
+                if (t) tasks = t;
+            } catch (e) { console.error(e); }
+        } 
+        
+        // PRIORITAS 2: Jika belum login, cek apakah nomor WA terdaftar di Profile
+        if (!isManualLogin) {
             const senderNumber = sender.replace('@c.us', '');
             const formats = [
-                senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`, 
+                senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`,
                 senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber
             ];
-
-            let { data: profile } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[0]).single();
-            if (profile) userProfile = profile;
-            else {
-                let { data: profile2 } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', formats[1]).single();
-                userProfile = profile2;
-            }
-
-            // Fallback: Coba format 08xx jika 628xx gagal
-            if (!userProfile && senderNumber.startsWith('62')) {
-                const localFormat = '0' + senderNumber.substring(2);
-                let { data: profile3 } = await authSupabase.from('profiles').select('id').eq('whatsapp_number', localFormat).single();
-                if (profile3) userProfile = profile3;
-            }
             
-            // Jika ketemu profil via nomor HP, coba ambil tugas (mungkin diblokir RLS jika tabel private)
-            if (userProfile) {
+            let { data: profile } = await authSupabase
+                .from('profiles')
+                .select('id, role')
+                .eq('whatsapp_number', formats[0])
+                .single();
+            
+            if (!profile) {
+                let { data: profile2 } = await authSupabase
+                    .from('profiles')
+                    .select('id, role')
+                    .eq('whatsapp_number', formats[1])
+                    .single();
+                profile = profile2;
+            }
+
+            if (profile) {
+                userProfile = profile;
+                // Fetch tasks using Service Role (karena kita punya profile ID)
                 const { data: t } = await authSupabase
                     .from('tasks')
                     .select('*')
-                    .eq('user_id', userProfile.id)
+                    .eq('user_id', profile.id)
                     .eq('status', 'active')
                     .order('created_at', { ascending: false })
-                    .limit(10);
+                    .limit(5);
                 if (t) tasks = t;
             }
         }
-        
-        let taskContext = "";
-        if (userProfile) {
-            if (tasks && tasks.length > 0) {
-                // Format lebih jelas agar AI tidak bingung (Priority & Date explicit)
-                taskContext = tasks.map((t, i) => `${i+1}. ${t.title} (Prioritas: ${t.priority || 'medium'}, Deadline: ${t.due_date || '-'})`).join('\n');
-            } else {
-                taskContext = "TIDAK ADA TUGAS.";
-            }
-        } else {
-            // INFO PENTING: Beritahu AI bahwa user belum login
-            taskContext = `USER_NOT_LOGGED_IN. SARANKAN: !login <email> <pass>`;
-        }
 
-        // Ambil History Chat
-        let history = chatHistory.get(sender) || [];
-        // Limit history to last 6 messages (3 turns) to save tokens/memory
-        if (history.length > 6) history = history.slice(history.length - 6);
-
-        // Proses dengan AI
-        // await client.sendMessage(sender, "⏳"); // Hapus indikator loading yang mengganggu
-        const aiResponse = await processWithAI(text, taskContext, history);
-        
-        // Simpan ke History (User & AI)
-        history.push({ role: 'user', content: text });
-        history.push({ role: 'assistant', content: aiResponse.text });
-        chatHistory.set(sender, history);
-        
-        // Cek apakah ada JSON Action di dalam respon AI
-        let jsonMatch = aiResponse.text.match(/```json\s*([\s\S]*?)\s*```/);
-        let jsonString = null;
-
-        if (jsonMatch) {
-            jsonString = jsonMatch[1];
-        } else {
-            // Fallback: Manual Extraction untuk JSON tanpa code block
-            // Cari posisi dimulainya {"action"
-            const actionIndex = aiResponse.text.indexOf('{"action"');
-            if (actionIndex !== -1) {
-                // Cari tutup kurawal terakhir di pesan
-                const lastBraceIndex = aiResponse.text.lastIndexOf('}');
-                if (lastBraceIndex > actionIndex) {
-                    jsonString = aiResponse.text.substring(actionIndex, lastBraceIndex + 1);
-                    jsonMatch = [jsonString]; // Mock match agar bisa di-replace
-                }
-            }
-        }
-        
-        // Default reply adalah teks dari AI (bersihkan JSON jika ada)
-        let finalReply = aiResponse.text;
-        if (jsonMatch) {
-            finalReply = aiResponse.text.replace(jsonMatch[0], '').trim(); // Selalu hapus JSON dari chat
-        }
-
-        if (jsonString) {
-            try {
-                const actionData = JSON.parse(jsonString);
-                
-                if (actionData.action === 'create_task' && userProfile) {
-                    const { title, priority, due_date, reminder_interval } = actionData.data;
-                    
-                    // Fix Timezone: Asumsikan input AI "YYYY-MM-DD HH:mm" adalah WIB (UTC+7)
-                    let fixedDueDate = due_date ? due_date.trim() : null;
-                    // console.log('[DEBUG AI] Create Task Raw DueDate:', fixedDueDate);
-
-                    // FALLBACK AGRESIF: Selalu cari jam di teks user untuk menimpa/melengkapi jam AI
-                            // Jika AI mengembalikan tanggal valid (minimal ada YYYY-MM-DD)
-                            if (fixedDueDate) {
-                                // Ekstrak YYYY-MM-DD dengan regex agar aman
-                                const dateMatch = fixedDueDate.match(/^(\d{4}-\d{2}-\d{2})/);
-                                const dateBase = dateMatch ? dateMatch[1] : fixedDueDate.substring(0, 10);
-                                
-                                // Cari jam di teks user (format: HH:MM, H:MM, HH.MM)
-                                // Support: "jam 19:40", "pukul 19.40", "pkl 19:40", atau "19:40"
-                                const timeMatch = text.match(/(?:jam|pukul|pkl)\s*(\d{1,2}[:.]\d{2})/i) || text.match(/\b(\d{1,2}[:.]\d{2})\b/);
-                                
-                                if (timeMatch) {
-                                    let timeStr = timeMatch[1].replace('.', ':');
-                                    const [h, m] = timeStr.split(':');
-                                    // Padding jam/menit (misal 9:5 -> 09:05)
-                                    const hStr = h.length === 1 ? '0' + h : h;
-                                    const mStr = m.length === 1 ? '0' + m : m; // Asumsi menit jarang 1 digit, tapi jaga-jaga
-                                    timeStr = `${hStr}:${mStr}`;
-                                    
-                                    // FORCE OVERRIDE JAM
-                                    fixedDueDate = `${dateBase} ${timeStr}`;
-                                    // console.log('[DEBUG FALLBACK] Force time injection:', fixedDueDate);
-                                }
-                            }
-
-                    if (fixedDueDate && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?/.test(fixedDueDate)) {
-                        let isoBase = fixedDueDate.replace(' ', 'T');
-                        if (isoBase.length === 16) isoBase += ':00';
-                        fixedDueDate = isoBase + '+07:00';
-                        console.log('[DEBUG AI] Fixed DueDate (WIB):', fixedDueDate);
-                    }
-
-                    let savedTask = null;
-                    let saveError = null;
-
-                    if (isManualLogin && userClient && session && session.user) {
-                        const { data: insertedData, error } = await userClient
-                            .from('tasks')
-                            .insert([{
-                                user_id: session.user.id,
-                                title: title || 'Tugas Baru',
-                                priority: priority || 'medium',
-                                due_date: fixedDueDate || null,
-                                reminder_interval: reminder_interval || null,
-                                status: 'active'
-                            }])
-                            .select();
-                        if (!error && insertedData && insertedData[0]) {
-                            savedTask = insertedData[0];
-                        } else {
-                            saveError = error;
-                        }
-                    } else {
-                        const senderNumber = sender.replace('@c.us', '');
-                        const formattedNumber = senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`;
-                        const { data: rpcResult, error: rpcError } = await authSupabase.rpc('create_task_from_bot', {
-                            p_whatsapp_number: formattedNumber,
-                            p_title: title || 'Tugas Baru',
-                            p_due_date: fixedDueDate,
-                            p_interval: reminder_interval || 0
-                        });
-                        if (!rpcError && rpcResult && rpcResult.success) {
-                            savedTask = { 
-                                id: rpcResult.task_id, 
-                                title: title || 'Tugas Baru', 
-                                due_date: fixedDueDate 
-                            };
-                        } else {
-                            saveError = rpcError || new Error(rpcResult?.message || 'RPC create_task_from_bot failed');
-                        }
-                    }
-
-                    if (!saveError) {
-                        let dateInfo = '';
-                        const finalDate = savedTask ? savedTask.due_date : fixedDueDate;
-                        if (finalDate) {
-                            try {
-                                dateInfo = ' 📅 ' + new Date(finalDate).toLocaleString('id-ID', { 
-                                    timeZone: 'Asia/Jakarta',
-                                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
-                                }).replace('.', ':');
-                            } catch (e) {}
-                        }
-                        finalReply = `✅ *Sukses!* Tugas "${title}" berhasil disimpan${dateInfo}`;
-                        if (reminder_interval) finalReply += ` (Reminder: ${reminder_interval}m)`;
-                    } else {
-                        finalReply = `❌ Gagal: ${saveError.message || String(saveError)}`;
-                    }
-                }
-
-                else if (actionData.action === 'update_task' && userProfile) {
-                    const { id, title, status, priority, due_date, reminder_interval } = actionData.data;
-                    const targetIds = Array.isArray(id) ? id : [id];
-                    let successCount = 0;
-
-                    for (const targetId of targetIds) {
-                        const taskIndex = parseInt(targetId) - 1;
-                        if (!tasks || !tasks[taskIndex]) continue;
-
-                        const realTask = tasks[taskIndex];
-                        const updates = {};
-                        if (title) updates.title = title;
-                        if (status) {
-                             updates.status = (status === 'selesai' || status === 'completed') ? 'completed' : status;
-                             if (updates.status === 'completed') updates.completed_at = new Date().toISOString();
-                        }
-                        if (priority) updates.priority = priority;
-                        if (due_date) {
-                            let fixedDueDate = due_date ? due_date.trim() : null;
-                            // console.log('[DEBUG AI] Update Task Raw DueDate:', fixedDueDate);
-
-                            // FALLBACK AGRESIF: Selalu cari jam di teks user untuk menimpa/melengkapi jam AI
-                            if (fixedDueDate) {
-                                // Ekstrak YYYY-MM-DD dengan regex agar aman
-                                const dateMatch = fixedDueDate.match(/^(\d{4}-\d{2}-\d{2})/);
-                                const dateBase = dateMatch ? dateMatch[1] : fixedDueDate.substring(0, 10);
-                                
-                                // Cari jam di teks user (format: HH:MM, H:MM, HH.MM)
-                                const timeMatch = text.match(/(?:jam|pukul|pkl)\s*(\d{1,2}[:.]\d{2})/i) || text.match(/\b(\d{1,2}[:.]\d{2})\b/);
-                                
-                                if (timeMatch) {
-                                    let timeStr = timeMatch[1].replace('.', ':');
-                                    const [h, m] = timeStr.split(':');
-                                    const hStr = h.length === 1 ? '0' + h : h;
-                                    const mStr = m.length === 1 ? '0' + m : m;
-                                    timeStr = `${hStr}:${mStr}`;
-                                    
-                                    // FORCE OVERRIDE JAM
-                                    fixedDueDate = `${dateBase} ${timeStr}`;
-                                    // console.log('[DEBUG FALLBACK UPDATE] Force time injection:', fixedDueDate);
-                                }
-                            }
-
-                            if (fixedDueDate && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?/.test(fixedDueDate)) {
-                                let isoBase = fixedDueDate.replace(' ', 'T');
-                                if (isoBase.length === 16) isoBase += ':00';
-                                fixedDueDate = isoBase + '+07:00';
-                                console.log('[DEBUG AI] Fixed DueDate (WIB):', fixedDueDate);
-                            }
-                            updates.due_date = fixedDueDate;
-                        }
-                        if (reminder_interval) updates.reminder_interval = reminder_interval;
-
-                        const { data: updatedData, error } = await authSupabase.from('tasks').update(updates).eq('id', realTask.id).select();
-                        if (!error) {
-                            successCount++;
-                            // Gunakan data aktual dari DB untuk feedback
-                            if (updatedData && updatedData[0]) {
-                                actionData.data.due_date = updatedData[0].due_date;
-                                // console.log('[DEBUG UPDATE] Saved Task DueDate:', updatedData[0].due_date);
-                            }
-                        }
-                    }
-                    console.log(`[DEBUG AI ACTION] Update Task: TargetIds=${JSON.stringify(targetIds)}, Success=${successCount}`);
-                    if (successCount === 0) console.log("Available Tasks Context:", tasks.map((t,i) => `${i+1}:${t.title}`).join(', '));
-                    
-                    finalReply = successCount > 0 ? `✅ ${successCount} tugas berhasil diupdate.` : `⚠️ Gagal update. Cek nomor tugas (!list).`;
-                    // Tambahkan info tanggal baru jika ada update tanggal
-                    if (successCount > 0 && actionData.data.due_date) {
-                         try {
-                             const newDateStr = new Date(actionData.data.due_date).toLocaleString('id-ID', { 
-                                 timeZone: 'Asia/Jakarta',
-                                 day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
-                             }).replace('.', ':');
-                             finalReply += `\nTenggat baru: ${newDateStr}`;
-                         } catch (e) {}
-                    }
-                }
-
-                else if (actionData.action === 'delete_task' && userProfile) {
-                    const { id } = actionData.data;
-                    const targetIds = Array.isArray(id) ? id : [id];
-                    let successCount = 0;
-
-                    for (const targetId of targetIds) {
-                         const taskIndex = parseInt(targetId) - 1;
-                         if (!tasks || !tasks[taskIndex]) continue;
-                         
-                         const { error } = await authSupabase.from('tasks').delete().eq('id', tasks[taskIndex].id);
-                         if (!error) successCount++;
-                    }
-                    finalReply = successCount > 0 ? `🗑️ ${successCount} tugas berhasil dihapus.` : `⚠️ Gagal hapus. Cek nomor tugas (!list).`;
-                }
-            } catch (e) {
-                console.error("Gagal parsing JSON Action:", e);
-            }
-        }
-
-        if (finalReply) {
-            try {
-                await client.sendMessage(sender, finalReply);
-            } catch (e) {
-                const msgText = (e && e.message) ? e.message : String(e);
-                if (msgText.includes('markedUnread') || msgText.includes('sendSeen')) {
-                    console.warn('WhatsApp Web internal bug (markedUnread/sendSeen) diabaikan saat kirim balasan AI.');
-                } else {
-                    console.error('Error sending AI reply:', e);
-                }
-            }
-        }
+        // Generate AI Response
+        const reply = await processWithAI(text, sender, userProfile, tasks);
+        await msg.reply(reply);
     }
 });
 
-console.log('Memulai bot...');
 client.initialize();

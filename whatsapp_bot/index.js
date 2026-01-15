@@ -97,6 +97,8 @@ const fontTitlePromise = Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
 const fontHeaderPromise = Jimp.loadFont(Jimp.FONT_SANS_16_BLACK);
 const fontSmallPromise = Jimp.loadFont(Jimp.FONT_SANS_14_BLACK);
 
+cleanupChromeSingletonLock();
+
 const generateTasksReportImage = async ({ userLabel, periodLabel, printedAtLabel, tasks }) => {
     const width = 1100;
     const marginX = 40;

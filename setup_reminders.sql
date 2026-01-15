@@ -115,11 +115,16 @@ DECLARE
   v_user_id UUID;
   v_task_id UUID;
   v_final_due_date TIMESTAMP WITH TIME ZONE;
+  v_clean_input TEXT;
+  v_clean_db TEXT;
 BEGIN
-  -- Cari user_id berdasarkan nomor WA
+  -- Normalisasi nomor WA: ambil hanya digit
+  v_clean_input := regexp_replace(p_whatsapp_number, '\D', '', 'g');
+
+  -- Cari user_id berdasarkan nomor WA yang sudah dinormalisasi
   SELECT id INTO v_user_id
   FROM public.profiles
-  WHERE whatsapp_number = p_whatsapp_number
+  WHERE regexp_replace(COALESCE(whatsapp_number, ''), '\D', '', 'g') = v_clean_input
   LIMIT 1;
 
   IF v_user_id IS NULL THEN
@@ -131,7 +136,6 @@ BEGIN
      BEGIN
        v_final_due_date := p_due_date::TIMESTAMP WITH TIME ZONE;
      EXCEPTION WHEN OTHERS THEN
-       -- Jika format salah, set NULL atau bisa return error
        v_final_due_date := NULL;
      END;
   ELSE
@@ -191,4 +195,3 @@ BEGIN
   WHERE id = target_user_id;
 END;
 $$ LANGUAGE plpgsql;
-

@@ -938,6 +938,7 @@ client.on('message', async msg => {
             }
         }
 
+        const senderNumber = sender.replace('@c.us', '');
         let userProfile = null;
         let tasksClient = null;
 
@@ -946,7 +947,6 @@ client.on('message', async msg => {
             userProfile = { id: session.user.id };
             tasksClient = getUserSupabase(session.access_token);
         } else {
-            const senderNumber = sender.replace('@c.us', '');
             const formats = [
                 senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`,
                 senderNumber.startsWith('+') ? senderNumber.substring(1) : senderNumber

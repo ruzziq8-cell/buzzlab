@@ -19,7 +19,11 @@ async function checkScheduledMessages(client) {
         const { data: messages, error } = await supabase.rpc('get_pending_scheduled_messages');
 
         if (error) {
-            // Ignore "function not found" if SQL hasn't been run yet
+            const msg = `${error.message || ''} ${error.details || ''}`;
+            if (msg.includes('fetch failed') || msg.includes('UND_ERR_CONNECT_TIMEOUT') || msg.includes('Connect Timeout Error')) {
+                console.warn('[Scheduler] Supabase timeout/fetch failed, will retry later.');
+                return;
+            }
             if (!error.message.includes('function get_pending_scheduled_messages() does not exist')) {
                 console.error('[Scheduler] Error fetching messages:', error);
             }

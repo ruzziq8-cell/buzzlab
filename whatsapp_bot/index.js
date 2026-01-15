@@ -4,10 +4,9 @@ const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const http = require('http');
+const Jimp = require('jimp');
 const { processWithAI } = require('./ai_service');
 const { checkScheduledMessages } = require('./scheduler_service');
-
-const EMPTY_EXPORT_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAQklEQVR4Xu3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4G0BNwABYB1K3AAAAABJRU5ErkJggg==';
 
 console.log('Bot Version: 3.0 (AI Enabled)');
 
@@ -74,6 +73,294 @@ const SUPABASE_ANON_KEY = 'sb_publishable__MNgyCgZ98xSGsWc4z1lHg_zVKdyZZc';
 const sessions = new Map();
 const lastRequestTime = new Map();
 const chatHistory = new Map();
+
+const cleanupChromeSingletonLock = () => {
+    const baseDir = '.wwebjs_auth/session-buzzlab_bot_v2';
+    try {
+        if (!fs.existsSync(baseDir)) return;
+        const files = fs.readdirSync(baseDir);
+        for (const name of files) {
+            if (!name.startsWith('Singleton')) continue;
+            const fullPath = `${baseDir}/${name}`;
+            try {
+                fs.unlinkSync(fullPath);
+            } catch (e) {
+                console.warn('Failed to remove Chrome lock file:', fullPath, e.message);
+            }
+        }
+    } catch (e) {
+        console.warn('Error during Chrome SingletonLock cleanup:', e.message);
+    }
+};
+
+const fontTitlePromise = Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
+const fontHeaderPromise = Jimp.loadFont(Jimp.FONT_SANS_16_BLACK);
+const fontSmallPromise = Jimp.loadFont(Jimp.FONT_SANS_14_BLACK);
+
+const generateTasksReportImage = async ({ userLabel, periodLabel, printedAtLabel, tasks }) => {
+    const width = 1100;
+    const marginX = 40;
+    const marginY = 40;
+    const headerGap = 10;
+    const blockGap = 20;
+    const summaryHeight = 80;
+    const rowHeight = 36;
+    const tableHeaderHeight = 40;
+
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => (t.status || '').toLowerCase() === 'completed').length;
+    const pendingTasks = tasks.filter(t => {
+        const s = (t.status || '').toLowerCase();
+        return s !== 'completed' && s !== 'cancelled';
+    }).length;
+    const lateTasks = tasks.filter(t => {
+        const s = (t.status || '').toLowerCase();
+        if (s === 'completed') return false;
+        if (!t.due_date) return false;
+        const due = new Date(t.due_date);
+        return due.getTime() < Date.now();
+    }).length;
+    const completionPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    const tableHeight = tableHeaderHeight + rowHeight * totalTasks;
+    const estimatedHeight = marginY * 2 + 130 + blockGap + summaryHeight + blockGap + tableHeight;
+    const height = estimatedHeight;
+
+    const [fontTitle, fontHeader, fontSmall] = await Promise.all([
+        fontTitlePromise,
+        fontHeaderPromise,
+        fontSmallPromise
+    ]);
+
+    const image = new Jimp(width, height, Jimp.rgbaToInt(255, 255, 255, 255));
+
+    const colorText = Jimp.rgbaToInt(0, 0, 0, 255);
+    const colorMuted = Jimp.rgbaToInt(120, 120, 120, 255);
+    const colorBorder = Jimp.rgbaToInt(210, 210, 210, 255);
+    const colorHeaderBg = Jimp.rgbaToInt(245, 245, 245, 255);
+    const colorSummaryBg = Jimp.rgbaToInt(250, 250, 250, 255);
+    const colorGreen = Jimp.rgbaToInt(0, 153, 51, 255);
+    const colorRed = Jimp.rgbaToInt(204, 0, 0, 255);
+    const colorOrange = Jimp.rgbaToInt(230, 120, 0, 255);
+
+    const fillRect = (x, y, w, h, color) => {
+        for (let yy = y; yy < y + h; yy++) {
+            for (let xx = x; xx < x + w; xx++) {
+                image.setPixelColor(color, xx, yy);
+            }
+        }
+    };
+
+    const drawRectStroke = (x, y, w, h, color) => {
+        for (let xx = x; xx < x + w; xx++) {
+            image.setPixelColor(color, xx, y);
+            image.setPixelColor(color, xx, y + h - 1);
+        }
+        for (let yy = y; yy < y + h; yy++) {
+            image.setPixelColor(color, x, yy);
+            image.setPixelColor(color, x + w - 1, yy);
+        }
+    };
+
+    let cursorY = marginY;
+
+    image.print(fontTitle, marginX, cursorY, {
+        text: `Laporan Tugas (${periodLabel})`,
+        alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+        alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+    }, width - marginX * 2, 40);
+    cursorY += 46;
+
+    image.print(fontHeader, marginX, cursorY, {
+        text: `User: ${userLabel}`,
+        alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+        alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+    }, width - marginX * 2, 24, colorMuted);
+    cursorY += 26;
+
+    image.print(fontHeader, marginX, cursorY, {
+        text: printedAtLabel,
+        alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+        alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+    }, width - marginX * 2, 24, colorMuted);
+    cursorY += 24 + headerGap;
+
+    const summaryWidth = width - marginX * 2;
+    const cardWidth = Math.floor((summaryWidth - 4) / 5);
+    const cardHeight = summaryHeight;
+    const summaryY = cursorY;
+
+    const summaryItems = [
+        { label: 'Total Tugas', value: String(totalTasks), color: colorText },
+        { label: 'Selesai', value: String(completedTasks), color: colorGreen },
+        { label: 'Pending', value: String(pendingTasks), color: colorOrange },
+        { label: 'Terlambat', value: String(lateTasks), color: colorRed },
+        { label: 'Penyelesaian', value: `${completionPercent}%`, color: colorText }
+    ];
+
+    summaryItems.forEach((item, idx) => {
+        const x = marginX + idx * (cardWidth + 1);
+        fillRect(x, summaryY, cardWidth, cardHeight, colorSummaryBg);
+        drawRectStroke(x, summaryY, cardWidth, cardHeight, colorBorder);
+
+        image.print(fontHeader, x + 8, summaryY + 8, item.label);
+        image.print(fontTitle, x, summaryY + 30, {
+            text: item.value,
+            alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+            alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+        }, cardWidth, 34, item.color);
+    });
+
+    cursorY += summaryHeight + blockGap;
+
+    const tableX = marginX;
+    const tableWidth = width - marginX * 2;
+
+    const colNo = 60;
+    const colTitle = 360;
+    const colDue = 170;
+    const colPriority = 150;
+    const colStatus = 140;
+    const colCompletedAt = tableWidth - colNo - colTitle - colDue - colPriority - colStatus;
+
+    const tableHeaderY = cursorY;
+    fillRect(tableX, tableHeaderY, tableWidth, tableHeaderHeight, colorHeaderBg);
+    drawRectStroke(tableX, tableHeaderY, tableWidth, tableHeaderHeight, colorBorder);
+
+    const headerRow = [
+        { label: 'No', width: colNo },
+        { label: 'Tugas & Deskripsi', width: colTitle },
+        { label: 'Tenggat', width: colDue },
+        { label: 'Prioritas', width: colPriority },
+        { label: 'Status', width: colStatus },
+        { label: 'Selesai Pada', width: colCompletedAt }
+    ];
+
+    let headerCursorX = tableX;
+    headerRow.forEach(col => {
+        image.print(fontHeader, headerCursorX + 8, tableHeaderY + 12, col.label);
+        headerCursorX += col.width;
+        if (headerCursorX < tableX + tableWidth) {
+            for (let yy = tableHeaderY; yy < tableHeaderY + tableHeaderHeight; yy++) {
+                image.setPixelColor(colorBorder, headerCursorX, yy);
+            }
+        }
+    });
+
+    cursorY += tableHeaderHeight;
+
+    const formatDateShort = iso => {
+        if (!iso) return '-';
+        try {
+            const d = new Date(iso);
+            const datePart = d.toLocaleDateString('id-ID', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+            const timePart = d.toLocaleTimeString('id-ID', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).replace('.', ':');
+            return `${datePart}`;
+        } catch (e) {
+            return iso;
+        }
+    };
+
+    const formatTimeShort = iso => {
+        if (!iso) return '-';
+        try {
+            const d = new Date(iso);
+            return d.toLocaleTimeString('id-ID', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).replace('.', ':');
+        } catch (e) {
+            return '-';
+        }
+    };
+
+    const normalizePriority = p => {
+        if (!p) return 'Medium';
+        const v = String(p).toLowerCase();
+        if (v === 'low') return 'Low';
+        if (v === 'high') return 'High';
+        return 'Medium';
+    };
+
+    const normalizeStatus = s => {
+        if (!s) return 'Aktif';
+        const v = String(s).toLowerCase();
+        if (v === 'completed') return 'Selesai';
+        if (v === 'active') return 'Aktif';
+        if (v === 'pending') return 'Pending';
+        return s;
+    };
+
+    const getPriorityColor = p => {
+        const v = String(p).toLowerCase();
+        if (v === 'low') return colorGreen;
+        if (v === 'high') return colorRed;
+        return colorOrange;
+    };
+
+    const getStatusColor = s => {
+        const v = String(s).toLowerCase();
+        if (v === 'completed') return colorGreen;
+        if (v === 'pending') return colorOrange;
+        if (v === 'active') return colorText;
+        return colorText;
+    };
+
+    tasks.forEach((t, index) => {
+        const rowY = cursorY + index * rowHeight;
+        fillRect(tableX, rowY, tableWidth, rowHeight, index % 2 === 0 ? Jimp.rgbaToInt(255, 255, 255, 255) : Jimp.rgbaToInt(248, 248, 248, 255));
+        drawRectStroke(tableX, rowY, tableWidth, rowHeight, colorBorder);
+
+        const noText = String(index + 1);
+        const titleText = t.title || '-';
+        const dueDateText = formatDateShort(t.due_date);
+        const dueTimeText = formatTimeShort(t.due_date);
+        const priorityRaw = normalizePriority(t.priority);
+        const statusRaw = normalizeStatus(t.status);
+        const completedAtText = t.completed_at ? `${formatDateShort(t.completed_at)} ${formatTimeShort(t.completed_at)}` : '-';
+
+        let colX = tableX;
+
+        image.print(fontSmall, colX + 8, rowY + 10, noText);
+        colX += colNo;
+
+        image.print(fontSmall, colX + 8, rowY + 6, titleText);
+        colX += colTitle;
+
+        image.print(fontSmall, colX + 8, rowY + 4, dueDateText);
+        image.print(fontSmall, colX + 8, rowY + 18, dueTimeText);
+        colX += colDue;
+
+        fillRect(colX + 6, rowY + 8, colPriority - 12, rowHeight - 16, Jimp.rgbaToInt(255, 255, 255, 255));
+        image.print(fontSmall, colX + 10, rowY + 10, {
+            text: priorityRaw,
+            alignmentX: Jimp.HORIZONTAL_ALIGN_LEFT,
+            alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+        }, colPriority - 20, rowHeight - 20, getPriorityColor(priorityRaw));
+        colX += colPriority;
+
+        image.print(fontSmall, colX + 10, rowY + 10, {
+            text: statusRaw,
+            alignmentX: Jimp.HORIZONTAL_ALIGN_LEFT,
+            alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+        }, colStatus - 16, rowHeight - 20, getStatusColor(statusRaw));
+        colX += colStatus;
+
+        image.print(fontSmall, colX + 8, rowY + 10, completedAtText);
+    });
+
+    const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
+    return buffer.toString('base64');
+};
 
 const client = new Client({
     authStrategy: new LocalAuth({ clientId: 'buzzlab_bot_v2' }),
@@ -707,29 +994,9 @@ client.on('message', async msg => {
             month: 'long',
             day: 'numeric'
         });
-        const title = `Laporan Tugas ${label}`;
-        const header = `📄 ${title}\nDicetak pada ${dateStr}\nTotal: ${tasksFiltered.length} tugas\n`;
-        const detailLines = tasksFiltered.map((t, i) => {
-            let dStr = '';
-            if (t.due_date) {
-                try {
-                    dStr = new Date(t.due_date).toLocaleString('id-ID', {
-                        timeZone: 'Asia/Jakarta',
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    }).replace('.', ':');
-                } catch (e) {
-                    dStr = t.due_date;
-                }
-            }
-            const priority = t.priority || 'medium';
-            const status = t.status || 'active';
-            const dateInfo = dStr ? ` | 📅 ${dStr}` : '';
-            return `${i + 1}. ${t.title} [${priority}/${status}]${dateInfo}`;
-        });
-        const caption = `${header}\n${detailLines.join('\n')}`;
+        const userLabel = senderNumber;
+        const printedAtLabel = `Dicetak pada ${dateStr}`;
+        const periodLabel = label;
         const fileName =
             period === 'daily'
                 ? 'tugas_hari_ini.png'
@@ -737,8 +1004,14 @@ client.on('message', async msg => {
                 ? 'tugas_minggu_ini.png'
                 : 'tugas_bulan_ini.png';
         try {
-            const media = new MessageMedia('image/png', EMPTY_EXPORT_IMAGE_BASE64, fileName);
-            await client.sendMessage(sender, media, { caption });
+            const base64 = await generateTasksReportImage({
+                userLabel,
+                periodLabel,
+                printedAtLabel,
+                tasks: tasksFiltered
+            });
+            const media = new MessageMedia('image/png', base64, fileName);
+            await client.sendMessage(sender, media, { caption: `Laporan Tugas ${label}` });
         } catch (e) {
             const msgText = (e && e.message) ? e.message : String(e);
             if (msgText.includes('markedUnread') || msgText.includes('sendSeen')) {

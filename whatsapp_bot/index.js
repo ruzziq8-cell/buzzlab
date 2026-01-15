@@ -498,7 +498,17 @@ const checkReminders = async () => {
                     console.error('Error calculating task number:', err.message);
                 }
 
-                console.log(`Sending reminder (${reminderType}) to ${phoneNumber} for "${task.title}"`);
+                const nowId = new Date().toLocaleString('id-ID', {
+                    timeZone: 'Asia/Jakarta',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }).replace(/\./g, ':');
+
+                console.log(`[Reminder] ${nowId} | type=${reminderType} | to=${phoneNumber} | title="${task.title}"`);
 
                 let dateStr = '-';
                 if (task.due_date) {

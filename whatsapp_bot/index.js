@@ -175,14 +175,14 @@ const generateTasksReportImage = async ({ userLabel, periodLabel, printedAtLabel
         text: `User: ${userLabel}`,
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
         alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
-    }, width - marginX * 2, 24, colorMuted);
+    }, width - marginX * 2, 24);
     cursorY += 26;
 
     image.print(fontHeader, marginX, cursorY, {
         text: printedAtLabel,
         alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
         alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
-    }, width - marginX * 2, 24, colorMuted);
+    }, width - marginX * 2, 24);
     cursorY += 24 + headerGap;
 
     const summaryWidth = width - marginX * 2;
@@ -208,7 +208,7 @@ const generateTasksReportImage = async ({ userLabel, periodLabel, printedAtLabel
             text: item.value,
             alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
             alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
-        }, cardWidth, 34, item.color);
+        }, cardWidth, 34);
     });
 
     cursorY += summaryHeight + blockGap;
@@ -345,14 +345,14 @@ const generateTasksReportImage = async ({ userLabel, periodLabel, printedAtLabel
             text: priorityRaw,
             alignmentX: Jimp.HORIZONTAL_ALIGN_LEFT,
             alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
-        }, colPriority - 20, rowHeight - 20, getPriorityColor(priorityRaw));
+        }, colPriority - 20, rowHeight - 20);
         colX += colPriority;
 
         image.print(fontSmall, colX + 10, rowY + 10, {
             text: statusRaw,
             alignmentX: Jimp.HORIZONTAL_ALIGN_LEFT,
             alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
-        }, colStatus - 16, rowHeight - 20, getStatusColor(statusRaw));
+        }, colStatus - 16, rowHeight - 20);
         colX += colStatus;
 
         image.print(fontSmall, colX + 8, rowY + 10, completedAtText);

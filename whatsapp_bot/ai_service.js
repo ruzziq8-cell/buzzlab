@@ -22,6 +22,11 @@ const GEMINI_KEYS = [
 
 const COHERE_KEY = process.env.COHERE_API_KEY;
 const HF_TOKEN = process.env.HF_TOKEN;
+const OPENROUTER_KEYS = [
+    process.env.OPENROUTER_KEY_1,
+    process.env.OPENROUTER_KEY_2
+].filter(Boolean);
+const MISTRAL_KEY = process.env.MISTRAL_API_KEY;
 
 function getGroqKey() {
     if (process.env.GROQ_API_KEY) return process.env.GROQ_API_KEY;
@@ -43,6 +48,16 @@ function getCohereKey() {
 
 function getHuggingFaceKey() {
     return HF_TOKEN;
+}
+
+function getOpenRouterKey() {
+    if (OPENROUTER_KEYS.length === 0) return null;
+    return OPENROUTER_KEYS[Math.floor(Math.random() * OPENROUTER_KEYS.length)];
+}
+
+function getMistralKey() {
+    if (!MISTRAL_KEY) return null;
+    return MISTRAL_KEY;
 }
 
 async function processWithAI(userMessage, context = "", history = []) {
@@ -151,6 +166,60 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         }
     } catch (cohereError) {
         console.warn(`[AI] Cohere Gagal (${cohereError.message}). Coba Pollinations...`);
+    }
+
+    try {
+        const openRouterKey = getOpenRouterKey();
+        if (openRouterKey) {
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${openRouterKey}`,
+                    "HTTP-Referer": "https://example.com",
+                    "X-Title": "BuzzLab WhatsApp Bot"
+                },
+                body: JSON.stringify({
+                    model: "meta-llama/llama-3.1-8b-instruct:free",
+                    messages
+                }),
+                signal: AbortSignal.timeout(15000)
+            });
+
+            if (!response.ok) throw new Error(`Status ${response.status}`);
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content || data.choices?.[0]?.message;
+            if (!text) throw new Error("Respons OpenRouter tidak memiliki konten");
+            return { text };
+        }
+    } catch (openRouterError) {
+        console.warn(`[AI] OpenRouter Gagal (${openRouterError.message}). Coba Mistral...`);
+    }
+
+    try {
+        const mistralKey = getMistralKey();
+        if (mistralKey) {
+            const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${mistralKey}`
+                },
+                body: JSON.stringify({
+                    model: "mistral-small-latest",
+                    messages
+                }),
+                signal: AbortSignal.timeout(15000)
+            });
+
+            if (!response.ok) throw new Error(`Status ${response.status}`);
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content;
+            if (!text) throw new Error("Respons Mistral tidak memiliki konten");
+            return { text };
+        }
+    } catch (mistralError) {
+        console.warn(`[AI] Mistral Gagal (${mistralError.message}). Coba Pollinations...`);
     }
 
     // --- STRATEGI 4: HUGGING FACE (Free Tier - Opsional) ---

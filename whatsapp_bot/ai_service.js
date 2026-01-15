@@ -147,11 +147,31 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         { role: 'user', content: userMessage }
     ];
 
-    // --- STRATEGI 1: COHERE (Primary) ---
+    // --- STRATEGI 1: POLLINATIONS.AI (Primary) ---
+    try {
+        const response = await fetch("https://text.pollinations.ai/", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                messages: messages,
+                model: 'openai', 
+                seed: 42,
+                jsonMode: false
+            }),
+            signal: AbortSignal.timeout(30000)
+        });
+
+        if (!response.ok) throw new Error(`Status ${response.status}`);
+        return { text: await response.text() };
+
+    } catch (pollError) {
+        console.warn(`[AI] Pollinations Gagal (${pollError.message}). Coba Cohere...`);
+    }
+
+    // --- STRATEGI 2: COHERE ---
     try {
         const cohereKey = getCohereKey();
         if (cohereKey) {
-            // console.log("[AI] Menggunakan Cohere...");
             const response = await fetch("https://api.cohere.com/v1/chat", {
                 method: 'POST',
                 headers: { 
@@ -172,9 +192,10 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
             return { text: data.text };
         }
     } catch (cohereError) {
-        console.warn(`[AI] Cohere Gagal (${cohereError.message}). Coba Pollinations...`);
+        console.warn(`[AI] Cohere Gagal (${cohereError.message}). Coba OpenRouter...`);
     }
 
+    // --- STRATEGI 3: OPENROUTER ---
     try {
         const openRouterKey = getOpenRouterKey();
         if (openRouterKey) {
@@ -203,6 +224,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         console.warn(`[AI] OpenRouter Gagal (${openRouterError.message}). Coba Mistral...`);
     }
 
+    // --- STRATEGI 4: MISTRAL ---
     try {
         const mistralKey = getMistralKey();
         if (mistralKey) {
@@ -226,7 +248,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
             return { text };
         }
     } catch (mistralError) {
-        console.warn(`[AI] Mistral Gagal (${mistralError.message}). Coba Pollinations...`);
+        console.warn(`[AI] Mistral Gagal (${mistralError.message}). Coba Gemini...`);
     }
 
     // --- STRATEGI 4: HUGGING FACE (Free Tier - Opsional) ---
@@ -242,29 +264,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
     }
     */
 
-    // --- STRATEGI 2: POLLINATIONS.AI (Gratis, Backup sebelum Gemini) ---
-    try {
-        // console.log("[AI] Menggunakan Pollinations...");
-        const response = await fetch("https://text.pollinations.ai/", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                messages: messages,
-                model: 'openai', 
-                seed: 42,
-                jsonMode: false
-            }),
-            signal: AbortSignal.timeout(30000) // 30 Detik Timeout (diperlama agar tidak timeout)
-        });
-
-        if (!response.ok) throw new Error(`Status ${response.status}`);
-        return { text: await response.text() };
-
-    } catch (pollError) {
-        console.warn(`[AI] Pollinations Gagal (${pollError.message}). Coba Gemini (opsi terakhir)...`);
-    }
-
-    // --- STRATEGI 3: GEMINI (OPSIONAL, PALING TERAKHIR) ---
+    // --- STRATEGI 5: GEMINI (OPSIONAL, PALING TERAKHIR) ---
     try {
         const geminiKey = getGeminiKey();
         if (geminiKey) {

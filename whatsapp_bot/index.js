@@ -75,6 +75,144 @@ const sessions = new Map();
 const lastRequestTime = new Map();
 const chatHistory = new Map();
 
+const formatNowId = () => {
+    return new Date().toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).replace(/\./g, ':');
+};
+
+const extractJsonAction = (raw) => {
+    if (!raw) return null;
+    let s = String(raw).trim();
+    let candidate = null;
+    const fenceMatch = s.match(/```json([\s\S]*?)```/i);
+    if (fenceMatch && fenceMatch[1]) {
+        candidate = fenceMatch[1].trim();
+    } else {
+        if (/^json\s*/i.test(s)) {
+            s = s.replace(/^json\s*/i, '');
+        }
+        const first = s.indexOf('{');
+        const last = s.lastIndexOf('}');
+        if (first !== -1 && last !== -1 && last > first) {
+            candidate = s.slice(first, last + 1);
+        }
+    }
+    if (!candidate) return null;
+    try {
+        return JSON.parse(candidate);
+    } catch {
+        return null;
+    }
+};
+
+const handleAiAction = async (payload, { sender, tasks, userProfile, isManualLogin, userClient }) => {
+    if (!payload || typeof payload !== 'object') return null;
+    const action = (payload.action || '').toString().toLowerCase();
+    const data = payload.data || {};
+
+    if (action === 'create_task') {
+        const title = data.title ? String(data.title).trim() : '';
+        if (!title) return '⚠️ AI tidak mengirim judul tugas yang valid.';
+
+        const dueRaw = data.due_date ? String(data.due_date).trim() : null;
+        let rpcDue = dueRaw;
+        if (dueRaw) {
+            try {
+                const normalized = dueRaw.replace(' ', 'T');
+                const parsed = new Date(normalized);
+                if (!isNaN(parsed.getTime())) {
+                    rpcDue = parsed.toISOString();
+                }
+            } catch {
+                rpcDue = dueRaw;
+            }
+        }
+
+        const reminderInterval = Number.isFinite(Number(data.reminder_interval)) ? Number(data.reminder_interval) : 0;
+
+        const senderNumber = sender.replace('@c.us', '');
+        const formattedNumber = senderNumber.startsWith('+') ? senderNumber : `+${senderNumber}`;
+
+        const { data: rpcResult, error: rpcError } = await authSupabase.rpc('create_task_from_bot', {
+            p_whatsapp_number: formattedNumber,
+            p_title: title,
+            p_due_date: rpcDue,
+            p_interval: reminderInterval
+        });
+
+        if (rpcResult && rpcResult.success) {
+            let reply = `✅ Tugas *"${title}"* berhasil ditambahkan.`;
+            if (dueRaw) reply += `\n📅 Tenggat: ${dueRaw}`;
+            if (reminderInterval > 0) reply += `\n⏰ Reminder tiap ${reminderInterval} menit.`;
+            return reply;
+        }
+
+        if (rpcResult && !rpcResult.success && rpcResult.message === 'User not found' && isManualLogin && userProfile && userClient) {
+            const insertData = {
+                user_id: userProfile.id,
+                title: title,
+                priority: data.priority || 'medium',
+                status: 'active',
+                due_date: rpcDue,
+                reminder_interval: reminderInterval
+            };
+            const { error } = await userClient.from('tasks').insert([insertData]);
+            if (!error) {
+                let reply = `✅ Tugas *"${title}"* berhasil ditambahkan (via login).`;
+                if (dueRaw) reply += `\n📅 Tenggat: ${dueRaw}`;
+                if (reminderInterval > 0) reply += `\n⏰ Reminder tiap ${reminderInterval} menit.`;
+                return reply;
+            }
+            return '❌ Gagal menambah tugas dari AI (Login Session).';
+        }
+
+        console.error('AI create_task error:', rpcError || rpcResult);
+        return '❌ Gagal menambah tugas dari AI.';
+    }
+
+    if (action === 'update_task') {
+        const ids = Array.isArray(data.id) ? data.id : [];
+        if (!ids.length || !tasks || !tasks.length) {
+            return '⚠️ Tidak bisa update tugas: daftar tugas kosong atau id tidak valid.';
+        }
+        const statusRaw = data.status ? String(data.status).toLowerCase() : '';
+        let newStatus = statusRaw || 'completed';
+        if (statusRaw === 'completed' || statusRaw === 'done') newStatus = 'completed';
+
+        const clientForTasks = userClient || authSupabase;
+        const updatedTitles = [];
+
+        for (const idxRaw of ids) {
+            const idx = parseInt(idxRaw) - 1;
+            if (isNaN(idx) || idx < 0 || idx >= tasks.length) continue;
+            const t = tasks[idx];
+            const updatePayload = { status: newStatus };
+            if (newStatus === 'completed') {
+                updatePayload.completed_at = new Date().toISOString();
+            }
+            const { error } = await clientForTasks.from('tasks').update(updatePayload).eq('id', t.id);
+            if (!error) {
+                updatedTitles.push(t.title);
+            }
+        }
+
+        if (!updatedTitles.length) {
+            return '⚠️ Tidak ada tugas yang berhasil diupdate dari perintah AI.';
+        }
+
+        return `✅ Tugas berhasil diupdate: ${updatedTitles.map(t => `*${t}*`).join(', ')}`;
+    }
+
+    return null;
+};
+
 const cleanupChromeSingletonLock = () => {
     const baseDir = path.join(__dirname, '.wwebjs_auth', 'session-buzzlab_bot_v2');
     try {
@@ -379,24 +517,30 @@ const getUserSupabase = (accessToken) => {
 const authSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const checkReminders = async () => {
-    // Pastikan client sudah siap (sudah scan QR dan login)
-    if (!client.info) return;
+    const cycleTimeId = formatNowId();
 
-    // 1. Panggil RPC get_due_reminders
-    const { data: reminders, error } = await authSupabase.rpc('get_due_reminders');
-
-    if (error) {
-        // Suppress network errors (fetch failed) to avoid log spam
-        if (error.message && error.message.includes('fetch failed')) {
-            return;
-        }
-        console.error('RPC Error (checkReminders):', error.message);
+    if (!client.info) {
+        console.log(`[Reminder CCTV] ${cycleTimeId} | client=not_ready`);
         return;
     }
 
-    if (!reminders || reminders.length === 0) return;
+    const { data: reminders, error } = await authSupabase.rpc('get_due_reminders');
 
-    // console.log(`Found ${reminders.length} tasks to check.`);
+    if (error) {
+        const msg = error.message || '';
+        if (msg.includes('fetch failed')) {
+            console.log(`[Reminder CCTV] ${cycleTimeId} | error=fetch_failed`);
+            return;
+        }
+        console.error('RPC Error (checkReminders):', msg);
+        console.log(`[Reminder CCTV] ${cycleTimeId} | error=${msg}`);
+        return;
+    }
+
+    const count = Array.isArray(reminders) ? reminders.length : 0;
+    console.log(`[Reminder CCTV] ${cycleTimeId} | cycle=30s | due=${count}`);
+
+    if (!reminders || reminders.length === 0) return;
 
     const now = new Date();
 
@@ -498,15 +642,7 @@ const checkReminders = async () => {
                     console.error('Error calculating task number:', err.message);
                 }
 
-                const nowId = new Date().toLocaleString('id-ID', {
-                    timeZone: 'Asia/Jakarta',
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                }).replace(/\./g, ':');
+                const nowId = formatNowId();
 
                 console.log(`[Reminder] ${nowId} | type=${reminderType} | to=${phoneNumber} | title="${task.title}"`);
 
@@ -1175,11 +1311,35 @@ client.on('message', async msg => {
         const history = chatHistory.get(sender) || [];
         const aiResult = await processWithAI(text, context, history);
         const replyText = typeof aiResult === 'string' ? aiResult : aiResult && aiResult.text ? aiResult.text : '';
-        if (replyText && replyText.length > 0) {
-            await msg.reply(replyText);
+
+        let finalReply = '';
+        const actionPayload = extractJsonAction(replyText);
+        if (actionPayload && actionPayload.action) {
+            try {
+                const handled = await handleAiAction(actionPayload, {
+                    sender,
+                    tasks,
+                    userProfile,
+                    isManualLogin,
+                    userClient
+                });
+                if (handled) {
+                    finalReply = handled;
+                }
+            } catch (e) {
+                console.error('Error handling AI action:', e);
+            }
+        }
+
+        if (!finalReply && replyText && replyText.length > 0) {
+            finalReply = replyText;
+        }
+
+        if (finalReply && finalReply.length > 0) {
+            await msg.reply(finalReply);
             const newHistory = history.slice(-18);
             newHistory.push({ role: 'user', content: text });
-            newHistory.push({ role: 'assistant', content: replyText });
+            newHistory.push({ role: 'assistant', content: finalReply });
             chatHistory.set(sender, newHistory);
         }
     }

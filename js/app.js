@@ -61,6 +61,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                 weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
                 hour: '2-digit', minute: '2-digit'
             }).replace(/\./g, ':');
+        },
+        toUtcISOStringFromInput: (value) => {
+            if (!value) return null;
+            const parts = value.split('T');
+            if (parts.length !== 2) return null;
+            const [datePart, timePart] = parts;
+            const [y, m, d] = datePart.split('-').map(Number);
+            const [hh, mm] = timePart.split(':').map(Number);
+            const local = new Date(y, m - 1, d, hh, mm);
+            if (isNaN(local.getTime())) return null;
+            return local.toISOString();
+        },
+        toInputValueFromDb: (value) => {
+            if (!value) return '';
+            const d = new Date(value);
+            if (isNaN(d.getTime())) {
+                return value.length > 16 ? value.substring(0, 16) : value;
+            }
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const hours = String(d.getHours()).padStart(2, '0');
+            const minutes = String(d.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
         }
     };
 
@@ -152,7 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // --- Auth Check ---
-    const initApp = async () => {
+    async function initApp() {
         if (!window.supabaseClient) {
             console.error('Supabase client belum siap saat initApp.');
             return;
@@ -198,11 +222,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         // Initial Fetch
-        fetchTasks(supabase);
+        await fetchTasks(supabase);
         
         // Setup Realtime Subscription
         setupRealtimeSubscription(supabase);
-    };
+    }
 
     if (window.supabaseClient) {
         initApp();
@@ -210,8 +234,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.addEventListener('supabase:ready', initApp);
     }
 
-    // --- Realtime Subscription ---
-    const setupRealtimeSubscription = (supabase) => {
+    function setupRealtimeSubscription(supabase) {
         supabase
             .channel('public:tasks')
             .on('postgres_changes', { 
@@ -227,9 +250,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     console.log('Realtime subscription active');
                 }
             });
-    };
+    }
 
-    const handleRealtimeEvent = (payload) => {
+    function handleRealtimeEvent(payload) {
         const { eventType, new: newRecord, old: oldRecord } = payload;
         
         if (eventType === 'INSERT') {
@@ -265,7 +288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showToast('Tugas dihapus', 'error');
             }
         }
-    };
+    }
 
     // --- Toast Notification ---
     const showToast = (message, type = 'info') => {
@@ -618,12 +641,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Parse tags
         const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
 
+        const dueIso = DateUtils.toUtcISOStringFromInput(date);
+
         const newTask = {
             user_id: currentUser.id,
             title: title,
             description: desc || null,
             priority: priority,
-            due_date: date || null,
+            due_date: dueIso || null,
             tags: tags,
             status: 'active',
             reminder_interval: parseInt(reminder) || 0
@@ -668,11 +693,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
 
+        const dueIso = DateUtils.toUtcISOStringFromInput(date);
+
         const updates = {
             title: title,
             description: desc || null,
             priority: priority,
-            due_date: date || null,
+            due_date: dueIso || null,
             tags: tags,
             reminder_interval: Number(reminder) || 0,
             updated_at: new Date().toISOString()
@@ -757,10 +784,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('edit-task-desc').value = task.description || '';
         document.getElementById('edit-task-tags').value = task.tags ? task.tags.join(', ') : '';
         document.getElementById('edit-task-priority').value = task.priority;
-        // Handle ISO string for datetime-local (YYYY-MM-DDTHH:mm)
         let dateVal = '';
         if (task.due_date) {
-            dateVal = task.due_date.length > 16 ? task.due_date.substring(0, 16) : task.due_date;
+            dateVal = DateUtils.toInputValueFromDb(task.due_date);
         }
         document.getElementById('edit-task-date').value = dateVal;
         

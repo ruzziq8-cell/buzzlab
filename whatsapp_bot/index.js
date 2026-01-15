@@ -3,6 +3,7 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
+const path = require('path');
 const http = require('http');
 const Jimp = require('jimp');
 const { processWithAI } = require('./ai_service');
@@ -75,7 +76,7 @@ const lastRequestTime = new Map();
 const chatHistory = new Map();
 
 const cleanupChromeSingletonLock = () => {
-    const baseDir = '.wwebjs_auth/session-buzzlab_bot_v2';
+    const baseDir = path.join(__dirname, '.wwebjs_auth', 'session-buzzlab_bot_v2');
     try {
         if (!fs.existsSync(baseDir)) return;
         const files = fs.readdirSync(baseDir);

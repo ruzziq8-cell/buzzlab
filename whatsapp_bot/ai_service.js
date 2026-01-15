@@ -78,6 +78,7 @@ Kalau Bos lagi males, semangatin pake cara yang agak 'nyentil'.
 Kalau Bos nanya gak jelas, ledekin aja!
 
 JANGAN PERNAH MENULIS ULANG DATA TUGAS DI CHAT KECUALI DIMINTA.
+Kalau user cuma ngobrol (tanpa perintah tugas/JSON), jawab singkat maksimal 2 kalimat, langsung ke poinnya.
 
 CONTOH CHAT (WAJIB IKUTI GAYA INI):
 User: "Halo"
@@ -147,7 +148,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         { role: 'user', content: userMessage }
     ];
 
-    // --- STRATEGI 1: POLLINATIONS.AI (Primary) ---
+    // --- STRATEGI 1: POLLINATIONS.AI (Primary, cepat) ---
     try {
         const response = await fetch("https://text.pollinations.ai/", {
             method: 'POST',
@@ -158,7 +159,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
                 seed: 42,
                 jsonMode: false
             }),
-            signal: AbortSignal.timeout(30000)
+            signal: AbortSignal.timeout(8000)
         });
 
         if (!response.ok) throw new Error(`Status ${response.status}`);
@@ -184,7 +185,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
                     chat_history: history.map(h => ({ role: h.role === 'user' ? 'USER' : 'CHATBOT', message: h.content })),
                     model: "command-r-08-2024" // Model pengganti command-r-plus yang valid
                 }),
-                signal: AbortSignal.timeout(10000)
+                signal: AbortSignal.timeout(8000)
             });
 
             if (!response.ok) throw new Error(`Status ${response.status}`);
@@ -211,7 +212,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
                     model: "meta-llama/llama-3.1-8b-instruct:free",
                     messages
                 }),
-                signal: AbortSignal.timeout(15000)
+                signal: AbortSignal.timeout(8000)
             });
 
             if (!response.ok) throw new Error(`Status ${response.status}`);
@@ -238,7 +239,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
                     model: "mistral-small-latest",
                     messages
                 }),
-                signal: AbortSignal.timeout(15000)
+                signal: AbortSignal.timeout(8000)
             });
 
             if (!response.ok) throw new Error(`Status ${response.status}`);

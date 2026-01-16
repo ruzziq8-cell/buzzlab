@@ -213,36 +213,40 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
             return { text: data.text };
         }
     } catch (cohereError) {
-        console.warn(`[AI] Cohere Gagal (${cohereError.message}). Coba OpenRouter...`);
+        console.warn(`[AI] Cohere Gagal (${cohereError.message}). Coba HuggingFace...`);
     }
 
-    // --- STRATEGI 3: OPENROUTER ---
+    // --- STRATEGI 3: HUGGING FACE ---
     try {
-        const openRouterKey = getOpenRouterKey();
-        if (openRouterKey) {
-            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${openRouterKey}`,
-                    "HTTP-Referer": "https://example.com",
-                    "X-Title": "BuzzLab WhatsApp Bot"
+        const hfToken = getHuggingFaceKey();
+        if (hfToken) {
+            const response = await fetch("https://api-inference.huggingface.co/models/google/gemma-1.1-7b-it", {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${hfToken}`
                 },
                 body: JSON.stringify({
-                    model: "meta-llama/llama-3.1-8b-instruct:free",
-                    messages
+                    inputs: userMessage,
+                    parameters: { max_new_tokens: 128 }
                 }),
                 signal: AbortSignal.timeout(8000)
             });
 
             if (!response.ok) throw new Error(`Status ${response.status}`);
             const data = await response.json();
-            const text = data.choices?.[0]?.message?.content || data.choices?.[0]?.message;
-            if (!text) throw new Error("Respons OpenRouter tidak memiliki konten");
+            let text = '';
+            if (Array.isArray(data) && data[0]?.generated_text) {
+                text = data[0].generated_text;
+            } else if (typeof data === 'string') {
+                text = data;
+            } else {
+                text = JSON.stringify(data);
+            }
             return { text };
         }
-    } catch (openRouterError) {
-        console.warn(`[AI] OpenRouter Gagal (${openRouterError.message}). Coba Mistral...`);
+    } catch (hfError) {
+        console.warn(`[AI] HuggingFace Gagal (${hfError.message}). Coba Mistral...`);
     }
 
     // --- STRATEGI 4: MISTRAL ---
@@ -272,20 +276,36 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         console.warn(`[AI] Mistral Gagal (${mistralError.message}). Coba Gemini...`);
     }
 
-    // --- STRATEGI 4: HUGGING FACE (Free Tier - Opsional) ---
-    // DINONAKTIFKAN SEMENTARA: Endpoint API sering berubah/error
-    /*
+    // --- STRATEGI 5: OPENROUTER ---
     try {
-        const hfToken = getHuggingFaceKey();
-        if (hfToken) {
-            // ... (kode HF lama) ...
-        }
-    } catch (hfError) {
-        console.warn(`[AI] Hugging Face Gagal (${hfError.message}). Coba Pollinations...`);
-    }
-    */
+        const openRouterKey = getOpenRouterKey();
+        if (openRouterKey) {
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${openRouterKey}`,
+                    "HTTP-Referer": "https://example.com",
+                    "X-Title": "BuzzLab WhatsApp Bot"
+                },
+                body: JSON.stringify({
+                    model: "meta-llama/llama-3.1-8b-instruct:free",
+                    messages
+                }),
+                signal: AbortSignal.timeout(8000)
+            });
 
-    // --- STRATEGI 5: GEMINI (OPSIONAL, PALING TERAKHIR) ---
+            if (!response.ok) throw new Error(`Status ${response.status}`);
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content || data.choices?.[0]?.message;
+            if (!text) throw new Error("Respons OpenRouter tidak memiliki konten");
+            return { text };
+        }
+    } catch (openRouterError) {
+        console.warn(`[AI] OpenRouter Gagal (${openRouterError.message}). Coba Gemini...`);
+    }
+
+    // --- STRATEGI 6: GEMINI (OPSIONAL, PALING TERAKHIR) ---
     try {
         const geminiKey = getGeminiKey();
         if (geminiKey) {
@@ -322,7 +342,7 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
         console.warn(`[AI] Gemini Gagal (${geminiError.message}). Semua provider gagal.`);
     }
 
-    console.error(`[AI] Semua Provider Gagal: Cohere, Pollinations, dan Gemini.`);
+    console.error(`[AI] Semua Provider Gagal: Pollinations, Cohere, HuggingFace, Mistral, OpenRouter, Gemini.`);
     return { text: "Maaf, otak saya sedang nge-lag parah. Coba lagi nanti ya! 🤯" };
 }
 

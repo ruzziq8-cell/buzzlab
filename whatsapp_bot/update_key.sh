@@ -9,6 +9,9 @@ read -p "Gemini Key 1: " KEY1
 read -p "Gemini Key 2: " KEY2
 read -p "Cohere API Key: " COHERE
 read -p "Hugging Face Token: " HF
+read -p "Pollinations Token 1: " POL1
+read -p "Pollinations Token 2: " POL2
+read -p "Pollinations Token 3: " POL3
 
 # Buat file .env
 cat > .env <<EOL
@@ -20,6 +23,11 @@ GEMINI_KEY_2=$KEY2
 # Backup Providers
 COHERE_API_KEY=$COHERE
 HF_TOKEN=$HF
+
+# Pollinations Tokens (Optional, untuk akses token-based)
+POLLINATIONS_TOKEN_1=$POL1
+POLLINATIONS_TOKEN_2=$POL2
+POLLINATIONS_TOKEN_3=$POL3
 EOL
 
 echo ""

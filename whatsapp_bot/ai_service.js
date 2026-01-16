@@ -20,6 +20,12 @@ const GEMINI_KEYS = [
     process.env.GEMINI_KEY_2
 ].filter(Boolean);
 
+const POLLINATIONS_TOKENS = [
+    process.env.POLLINATIONS_TOKEN_1,
+    process.env.POLLINATIONS_TOKEN_2,
+    process.env.POLLINATIONS_TOKEN_3
+].filter(Boolean);
+
 const COHERE_KEYS = [
     process.env.COHERE_API_KEY,
     process.env.COHERE_KEY_1,
@@ -46,6 +52,11 @@ function getGeminiKey() {
     if (GEMINI_KEYS.length === 0) return null;
     // Pilih acak dari pool Gemini
     return GEMINI_KEYS[Math.floor(Math.random() * GEMINI_KEYS.length)];
+}
+
+function getPollinationsToken() {
+    if (POLLINATIONS_TOKENS.length === 0) return null;
+    return POLLINATIONS_TOKENS[Math.floor(Math.random() * POLLINATIONS_TOKENS.length)];
 }
 
 function getCohereKey() {
@@ -150,12 +161,21 @@ PRIORITAS: DETEKSI PERINTAH TUGAS > GAYA BAHASA GAUL.`;
 
     // --- STRATEGI 1: POLLINATIONS.AI (Primary, cepat) ---
     try {
-        const response = await fetch("https://text.pollinations.ai/", {
+        const pollToken = getPollinationsToken();
+        const pollHeaders = { 'Content-Type': 'application/json' };
+        let pollUrl = "https://text.pollinations.ai/";
+
+        if (pollToken) {
+            pollHeaders['Authorization'] = `Bearer ${pollToken}`;
+            pollUrl = "https://text.pollinations.ai/openai";
+        }
+
+        const response = await fetch(pollUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: pollHeaders,
             body: JSON.stringify({
                 messages: messages,
-                model: 'openai', 
+                model: 'openai',
                 seed: 42,
                 jsonMode: false
             }),

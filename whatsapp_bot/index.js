@@ -74,6 +74,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable__MNgyCgZ98xSGsWc4z1lHg_zVKdyZZc';
 const sessions = new Map();
 const lastRequestTime = new Map();
 const chatHistory = new Map();
+const localReminderCache = new Map();
 
 const formatNowId = () => {
     return new Date().toLocaleString('id-ID', {
@@ -608,15 +609,22 @@ const checkReminders = async () => {
         }
 
         if (shouldRemind) {
+                const cacheKey = `${task.id}:${reminderType}`;
+                const nowMs = now.getTime();
+                const lastLocal = localReminderCache.get(cacheKey);
+                if (lastLocal && nowMs - lastLocal < 60 * 1000) {
+                    const nowId = formatNowId();
+                    console.log(`[Reminder] ${nowId} | type=${reminderType} | task=${task.id} skipped_by_cache`);
+                    continue;
+                }
+                localReminderCache.set(cacheKey, nowMs);
+
                 let phoneNumber = task.whatsapp_number;
-                
-                // NORMALISASI NOMOR WA
                 phoneNumber = phoneNumber.replace(/\D/g, '');
                 if (!phoneNumber.endsWith('@c.us')) {
                     phoneNumber = `${phoneNumber}@c.us`;
                 }
 
-                // Hitung nomor urut tugas untuk user ini
                 let taskNumber = '?';
                 try {
                     const { data: profile, error: profileError } = await authSupabase
@@ -652,12 +660,11 @@ const checkReminders = async () => {
                         dateStr = new Date(task.due_date).toLocaleString('id-ID', { 
                             timeZone: 'Asia/Jakarta',
                             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', 
-                            hour: '2-digit', minute: '2-digit' 
+                            hour: '2-digit', minute: '2-digit', 
                         }).replace('.', ':');
                     } catch (e) { dateStr = task.due_date; }
                 }
 
-                // Custom Header based on Reminder Type
                 let header = '🔔 *REMINDER TUGAS* 🔔';
                 if (reminderType === '5min') header = '⚠️ *TUGAS TENGGAT 5 MENIT LAGI!* ⚠️';
                 if (reminderType === '1min') header = '🚨 *TUGAS TENGGAT 1 MENIT LAGI!* 🚨';
@@ -675,8 +682,7 @@ const checkReminders = async () => {
                 } catch (e) {
                     console.error(`❌ Failed to send reminder text:`, e.message);
                 }
-                    
-                // Update last_reminded_at via UPDATE biasa (bukan RPC, untuk menghindari masalah permissions/rpc)
+
                 const { error: updateError } = await authSupabase
                     .from('tasks')
                     .update({ last_reminded_at: now.toISOString() })

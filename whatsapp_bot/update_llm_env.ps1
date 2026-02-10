@@ -42,7 +42,7 @@ Write-Host "File .env: $envPath"
 $openrouter1 = Read-Host "Tempel OpenRouter KEY 1 (Enter untuk skip)"
 $openrouter2 = Read-Host "Tempel OpenRouter KEY 2 (Enter untuk skip)"
 $mistral = Read-Host "Tempel Mistral API KEY (Enter untuk skip)"
-$poll1 = Read-Host "Tempel Pollinations TOKEN 1 (Enter untuk skip)"
+ $poll1 = Read-Host "Tempel Pollinations TOKEN 1 (Enter untuk skip)"
 $poll2 = Read-Host "Tempel Pollinations TOKEN 2 (Enter untuk skip)"
 $poll3 = Read-Host "Tempel Pollinations TOKEN 3 (Enter untuk skip)"
 

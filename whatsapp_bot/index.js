@@ -214,14 +214,36 @@ const handleAiAction = async (payload, { sender, tasks, userProfile, isManualLog
     return null;
 };
 
+const { execSync } = require('child_process');
+
 const cleanupChromeSingletonLock = () => {
     const baseDir = path.join(__dirname, '.wwebjs_auth', 'session-buzzlab_bot_v2');
+    
+    // 1. Kill Zombie Chrome Processes (Termux/Linux Only)
+    if (process.platform !== 'win32') {
+        try {
+            console.log('🧹 [Cleanup] Killing zombie chrome/chromium processes...');
+            execSync('pkill -f chromium || true');
+            execSync('pkill -f chrome || true');
+        } catch (e) {
+            // Ignore if no process found
+        }
+    }
+
+    // 2. Remove Specific Lock Files (Preferred over wiping session)
     try {
         if (fs.existsSync(baseDir)) {
-            fs.rmSync(baseDir, { recursive: true, force: true });
+            const filesToDelete = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
+            filesToDelete.forEach(file => {
+                const p = path.join(baseDir, file);
+                if (fs.existsSync(p)) {
+                    console.log(`🧹 [Cleanup] Removing lock file: ${file}`);
+                    fs.unlinkSync(p);
+                }
+            });
         }
     } catch (e) {
-        console.warn('Error during Chrome SingletonLock cleanup:', e.message);
+        console.warn('⚠️ [Cleanup] Error removing lock files:', e.message);
     }
 };
 

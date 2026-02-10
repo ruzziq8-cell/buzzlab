@@ -21,7 +21,8 @@ async function checkScheduledMessages(client) {
         if (error) {
             const msg = `${error.message || ''} ${error.details || ''}`;
             if (msg.includes('fetch failed') || msg.includes('UND_ERR_CONNECT_TIMEOUT') || msg.includes('Connect Timeout Error')) {
-                console.warn('[Scheduler] Supabase timeout/fetch failed, will retry later.');
+                // Too many logs. Reduce noise.
+                // console.warn('[Scheduler] Supabase timeout/fetch failed, will retry later.');
                 return;
             }
             if (!error.message.includes('function get_pending_scheduled_messages() does not exist')) {

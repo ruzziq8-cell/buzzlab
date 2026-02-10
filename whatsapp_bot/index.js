@@ -521,13 +521,38 @@ const generateTasksReportImage = async ({ userLabel, periodLabel, printedAtLabel
 const client = new Client({
     authStrategy: new LocalAuth({ clientId: 'buzzlab_bot_v2' }),
     puppeteer: puppeteerConfig,
-    webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
-    }
+    // webVersionCache: {
+    //     type: 'remote',
+    //     remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
+    // }
 });
 
-const getUserSupabase = (accessToken) => {
+// --- Debug Events ---
+client.on('loading_screen', (percent, message) => {
+    console.log(`[DEBUG] Loading Screen: ${percent}% - ${message}`);
+});
+
+client.on('authenticated', () => {
+    console.log('[DEBUG] Authenticated successfully!');
+});
+
+client.on('auth_failure', (msg) => {
+    console.error('[DEBUG] Auth Failure:', msg);
+});
+
+client.on('disconnected', (reason) => {
+    console.log('[DEBUG] Disconnected:', reason);
+});
+// --------------------
+
+client.on('qr', (qr) => {
+    qrcode.generate(qr, { small: true });
+    console.log('SCAN QR CODE INI UNTUK LOGIN');
+});
+
+client.on('ready', () => {
+    console.log('Client is ready! Bot Siap Menerima Pesan.');
+});
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: {
             headers: {
@@ -783,7 +808,13 @@ client.on('message', async msg => {
     // Command Handling
     // Gunakan satu rantai if-else if raksasa untuk mencegah eksekusi ganda
 
-    // 1. HANDLER !done & !snooze
+    // 1. HANDLER PING (DIAGNOSTIC)
+    if (text.toLowerCase() === 'ping') {
+        msg.reply('pong! Bot is active.');
+        return;
+    }
+
+    // 2. HANDLER !done & !snooze
     if (text.startsWith('!done ') || text.startsWith('!snooze ')) {
         const isDone = text.startsWith('!done ');
         const args = text.split(' ');

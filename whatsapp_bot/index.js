@@ -661,7 +661,8 @@ const checkReminders = async () => {
                 const cacheKey = `${task.id}:${reminderType}`;
                 const nowMs = now.getTime();
                 const lastLocal = localReminderCache.get(cacheKey);
-                if (lastLocal && nowMs - lastLocal < 60 * 1000) {
+                // Cache 5 menit untuk mencegah spam double trigger di window yang sama
+                if (lastLocal && nowMs - lastLocal < 5 * 60 * 1000) {
                     const nowId = formatNowId();
                     console.log(`[Reminder] ${nowId} | type=${reminderType} | task=${task.id} skipped_by_cache`);
                     continue;
@@ -753,7 +754,10 @@ client.on('qr', (qr) => {
 });
 
 client.on('ready', async () => {
-    console.log('✅ Client is ready!');
+    console.log('✅ Client is ready! Bot Siap Menerima Pesan.');
+    if (client.info) {
+        console.log(`📱 Logged in as: ${client.info.wid.user}`);
+    }
 
     try {
         const page = client.pupPage || client._page;
@@ -778,43 +782,50 @@ client.on('ready', async () => {
     }, 60000);
 });
 
+// DEBUG: Log ALL incoming messages (including from self, to verify stream)
+client.on('message_create', (msg) => {
+    if (!msg.fromMe) console.log(`[DEBUG RAW] Msg from ${msg.from}: ${msg.body.substring(0, 30)}...`);
+});
+
 client.on('message', async msg => {
-    // Abaikan pesan dari status broadcast
-    if (msg.from === 'status@broadcast') return;
+    try {
+        // Abaikan pesan dari status broadcast
+        if (msg.from === 'status@broadcast') return;
 
-    console.log(`[MSG] From: ${msg.from} | Body: ${msg.body.substring(0, 50)}...`);
+        console.log(`[MSG] From: ${msg.from} | Body: ${msg.body.substring(0, 50)}...`);
 
-    const text = msg.body.trim();
-    if (!text) return;
+        const text = msg.body.trim();
+        if (!text) return;
 
-    // SAFETY CHECK: Abaikan pesan dari bot sendiri (menghindari loop)
-    // Kecuali jika user menggunakan fitur "Note to Self", maka msg.fromMe = true.
-    // Kita bedakan berdasarkan konten: Jika diawali emoji bot, abaikan.
-    if (msg.id.fromMe) {
-        if (text.startsWith('🤖') || text.startsWith('🔔') || text.startsWith('✅') || text.startsWith('⏰') || text.startsWith('⚠️') || text.startsWith('❌')) {
+        // SAFETY CHECK: Abaikan pesan dari bot sendiri (menghindari loop)
+        // Kecuali jika user menggunakan fitur "Note to Self", maka msg.fromMe = true.
+        // Kita bedakan berdasarkan konten: Jika diawali emoji bot, abaikan.
+        if (msg.fromMe) {
+            if (text.startsWith('🤖') || text.startsWith('🔔') || text.startsWith('✅') || text.startsWith('⏰') || text.startsWith('⚠️') || text.startsWith('❌')) {
+                return;
+            }
+        }
+
+        // Cegah bot merespon balasannya sendiri (jika balasan mengandung tanda seru di awal - jarang terjadi tapi untuk keamanan)
+        // msg.id.fromMe bernilai true jika pesan dikirim oleh akun host.
+        // Kita izinkan fromMe HANYA jika itu pesan ke diri sendiri (Note to Self) atau test command manual.
+        // Tapi kita harus hati-hati agar tidak loop.
+        // Karena logic kita hanya merespon jika startsWith('!'), dan balasan bot tidak diawali '!', maka aman.
+        
+        const chat = await msg.getChat();
+        // Untuk pesan 'Note to Self', msg.from adalah nomor kita sendiri.
+        // msg.to juga nomor kita sendiri.
+        const sender = msg.from;
+
+        // Command Handling
+        // Gunakan satu rantai if-else if raksasa untuk mencegah eksekusi ganda
+
+        // 1. HANDLER PING (DIAGNOSTIC)
+        if (text.toLowerCase() === 'ping') {
+            console.log(`[PING] Responding to ping from ${sender}`);
+            await msg.reply('pong! Bot is active.');
             return;
         }
-    }
-
-    // Cegah bot merespon balasannya sendiri (jika balasan mengandung tanda seru di awal - jarang terjadi tapi untuk keamanan)
-    // msg.id.fromMe bernilai true jika pesan dikirim oleh akun host.
-    // Kita izinkan fromMe HANYA jika itu pesan ke diri sendiri (Note to Self) atau test command manual.
-    // Tapi kita harus hati-hati agar tidak loop.
-    // Karena logic kita hanya merespon jika startsWith('!'), dan balasan bot tidak diawali '!', maka aman.
-    
-    const chat = await msg.getChat();
-    // Untuk pesan 'Note to Self', msg.from adalah nomor kita sendiri.
-    // msg.to juga nomor kita sendiri.
-    const sender = msg.from;
-
-    // Command Handling
-    // Gunakan satu rantai if-else if raksasa untuk mencegah eksekusi ganda
-
-    // 1. HANDLER PING (DIAGNOSTIC)
-    if (text.toLowerCase() === 'ping') {
-        msg.reply('pong! Bot is active.');
-        return;
-    }
 
     // 2. HANDLER !done & !snooze
     if (text.startsWith('!done ') || text.startsWith('!snooze ')) {
@@ -1403,6 +1414,9 @@ client.on('message', async msg => {
             newHistory.push({ role: 'assistant', content: finalReply });
             chatHistory.set(sender, newHistory);
         }
+    }
+    } catch (error) {
+        console.error('[MSG HANDLER ERROR]', error);
     }
 });
 

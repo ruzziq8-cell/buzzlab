@@ -553,6 +553,8 @@ client.on('qr', (qr) => {
 client.on('ready', () => {
     console.log('Client is ready! Bot Siap Menerima Pesan.');
 });
+
+const getUserSupabase = (accessToken) => {
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: {
             headers: {
